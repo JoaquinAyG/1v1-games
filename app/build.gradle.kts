@@ -1,4 +1,4 @@
-﻿plugins {
+plugins {
     id("com.android.application")
     // AGP 9 compiles Kotlin itself; these two plugins only add Compose + @Serializable support.
     id("org.jetbrains.kotlin.plugin.compose")
