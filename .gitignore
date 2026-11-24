@@ -1,0 +1,19 @@
+# Build output and tool caches (Gradle, Kotlin, IDEs)
+build/
+.gradle/
+.kotlin/
+.idea/
+*.iml
+out/
+
+# Machine-specific paths (the Android SDK location)
+local.properties
+
+# Android build artifacts
+*.apk
+*.aab
+
+# OS and editor leftovers
+.DS_Store
+Thumbs.db
+*.log
