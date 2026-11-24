@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.classicgames.app.data.GameState
+import com.classicgames.core.GameState
 
 /** The tic-tac-toe board with a status line. The server decides everything; this only shows it and reports taps. */
 @Composable

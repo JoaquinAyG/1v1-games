@@ -30,7 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.classicgames.app.data.CheckersState
+import com.classicgames.core.CheckersState
 import kotlin.math.abs
 
 private const val SIZE = 8

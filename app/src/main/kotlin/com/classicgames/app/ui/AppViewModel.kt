@@ -1,33 +1,47 @@
 package com.classicgames.app.ui
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.classicgames.app.data.BattleState
 import com.classicgames.app.data.ChatClient
-import com.classicgames.app.data.ChatEvent
-import com.classicgames.app.data.CheckersState
-import com.classicgames.app.data.ClientMessage
-import com.classicgames.app.data.ConnectState
-import com.classicgames.app.data.GameState
-import com.classicgames.app.data.OthelloState
+import com.classicgames.app.data.NetworkWatcher
+import com.classicgames.app.data.SavedSession
+import com.classicgames.app.data.SessionEnd
 import com.classicgames.app.data.Settings
 import com.classicgames.app.data.SettingsStore
-import com.classicgames.app.data.ShipPlacement
+import com.classicgames.app.server.PhoneServer
+import com.classicgames.app.server.PhoneServerState
+import com.classicgames.core.BattleState
+import com.classicgames.core.CheckersState
+import com.classicgames.core.ClientMessage
+import com.classicgames.core.ConnectState
+import com.classicgames.core.GameState
+import com.classicgames.core.OthelloState
+import com.classicgames.core.ServerMessage
+import com.classicgames.core.ShipPlacement
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
-enum class ConnectionState { Connecting, Connected, Closed }
+/**
+ * Connecting: first connection attempt. Connected: in the room. Reconnecting: the connection dropped and we are
+ * trying to take our seat back. Closed: it is over (refused, seat expired, gave up); only Leave is left to do.
+ */
+enum class ConnectionState { Connecting, Connected, Reconnecting, Closed }
 
 data class ChatLine(
     val from: String,
@@ -56,7 +70,15 @@ data class RoomUi(
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
     val notice: String? = null,
+    /** Name of the other player while their connection is down (the server holds their seat for a while). */
+    val opponentOffline: String? = null,
 )
+
+/** Waits between reconnect attempts; the last value repeats. A network coming back skips the wait. */
+private val BACKOFF_MS = longArrayOf(1_000, 2_000, 3_000, 5_000)
+
+/** After this long without managing to reconnect we stop trying (the server gave the seat up long before). */
+private const val GIVE_UP_AFTER_MS = 3 * 60_000L
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val store = SettingsStore(app)
@@ -74,11 +96,65 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var busy by mutableStateOf(false)
         private set
 
-    private var session: Job? = null
-    private var outgoing: Channel<ClientMessage>? = null
+    /**
+     * One player's presence in one room. It lives on across dropped connections: [runSession] keeps reconnecting
+     * with the same [token] until the player leaves, the server refuses, or it gives up.
+     */
+    private class ActiveSession(val server: String, val name: String, val room: String, var token: String?) {
+        val outgoing = Channel<ClientMessage>(Channel.UNLIMITED)
+        @Volatile var left = false
+        @Volatile var sawSession = false
+        var job: Job? = null
+    }
+
+    private var active: ActiveSession? = null
+
+    /** Wakes a reconnect that is waiting between attempts. */
+    private val nudge = Channel<Unit>(Channel.CONFLATED)
+    private val network = NetworkWatcher(app) { nudge.trySend(Unit) }
+
+    /** The game server running inside this phone (when "Host the server on this phone" is on). */
+    val phoneServer: StateFlow<PhoneServerState> = PhoneServer.state
+
+    init {
+        network.start()
+        resumeSavedSession()
+
+        // If this phone was hosting the server when the app was last used, start it again.
+        viewModelScope.launch {
+            val saved = settings.filterNotNull().first()
+            if (saved.hostOnPhone) PhoneServer.start(getApplication())
+        }
+        // The server can also be stopped from its notification: then the switch must turn itself off.
+        viewModelScope.launch {
+            var previous: PhoneServerState = PhoneServer.state.value
+            PhoneServer.state.collect { now ->
+                if (previous is PhoneServerState.Running && now is PhoneServerState.Stopped &&
+                    settings.value?.hostOnPhone == true
+                ) {
+                    store.setHostOnPhone(false)
+                }
+                previous = now
+            }
+        }
+    }
 
     fun saveSettings(name: String, server: String) {
         viewModelScope.launch { store.save(name.trim(), server.trim()) }
+    }
+
+    /** Turns "Host the server on this phone" on or off, starting or stopping the server service. */
+    fun setHostOnPhone(enabled: Boolean) {
+        viewModelScope.launch {
+            lobbyError = null
+            store.setHostOnPhone(enabled)
+            if (enabled) PhoneServer.start(getApplication()) else PhoneServer.stop(getApplication())
+        }
+    }
+
+    /** Called when the app comes to the foreground: a good moment to retry a broken connection right away. */
+    fun onForeground() {
+        nudge.trySend(Unit)
     }
 
     /**
@@ -91,7 +167,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             busy = true
             lobbyError = null
             try {
-                joinRoom(client.newRoomCode(s.server), gameId)
+                joinRoom(client.newRoomCode(s.serverToUse), gameId)
             } catch (e: Exception) {
                 lobbyError = "Can't reach the server: ${e.message ?: e::class.simpleName}"
             } finally {
@@ -109,53 +185,134 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         lobbyError = null
         leaveRoom()
+        begin(ActiveSession(s.serverToUse, s.name, roomCode, token = null), RoomUi(roomCode, preferredGame = preferredGame))
+    }
 
-        val channel = Channel<ClientMessage>(Channel.UNLIMITED)
-        outgoing = channel
-        _room.value = RoomUi(roomCode, preferredGame = preferredGame)
-        session = viewModelScope.launch {
-            client.runSession(s.server, s.name, roomCode, channel) { event ->
-                _room.update { current -> current?.let { applyEvent(it, event) } }
+    /** At launch: if the app was closed or killed while in a room, take the seat back. */
+    private fun resumeSavedSession() {
+        viewModelScope.launch {
+            val saved = store.savedSession.first() ?: return@launch
+            if (active != null) return@launch
+            begin(
+                ActiveSession(saved.server, saved.name, saved.room, saved.token),
+                RoomUi(saved.room, state = ConnectionState.Reconnecting),
+            )
+        }
+    }
+
+    private fun begin(session: ActiveSession, room: RoomUi) {
+        active = session
+        _room.value = room
+        session.job = viewModelScope.launch { runSession(session) }
+    }
+
+    /** Connects, and keeps reconnecting while that makes sense. Returns when the session is over for good. */
+    private suspend fun runSession(session: ActiveSession) {
+        var attempts = 0
+        var downSince = 0L
+        while (!session.left) {
+            session.sawSession = false
+            val end = client.runSession(
+                session.server, session.name, session.room, session.token, session.outgoing,
+            ) { message -> onMessage(session, message) }
+            if (session.left) return
+
+            val now = SystemClock.elapsedRealtime()
+            if (session.sawSession) { // we were in and just got cut off: the outage starts now
+                attempts = 0
+                downSince = now
+            }
+            when (end) {
+                is SessionEnd.Left -> return
+                is SessionEnd.Rejected -> {
+                    giveUp(session, end.reason)
+                    return
+                }
+                is SessionEnd.Dropped -> {
+                    if (session.token == null) { // never got in: tell the user right away
+                        giveUp(session, end.reason ?: "Couldn't connect")
+                        return
+                    }
+                    if (downSince == 0L) downSince = now
+                    if (now - downSince > GIVE_UP_AFTER_MS) {
+                        giveUp(session, "Couldn't reconnect. Check your connection and try again.")
+                        return
+                    }
+                    if (active === session) {
+                        _room.update { it?.copy(state = ConnectionState.Reconnecting) }
+                    }
+                    withTimeoutOrNull(BACKOFF_MS[minOf(attempts++, BACKOFF_MS.lastIndex)]) { nudge.receive() }
+                }
             }
         }
     }
 
-    private fun applyEvent(room: RoomUi, event: ChatEvent): RoomUi = when (event) {
-        is ChatEvent.Received -> {
-            val msg = event.message
-            // The server's first message ("Joined room ...") confirms we are really in.
-            val connected = room.copy(state = ConnectionState.Connected)
-            when (msg.type) {
-                "game" -> connected.copy(
-                    game = msg.state,
-                    battle = msg.battle,
-                    connect = msg.connect,
-                    othello = msg.othello,
-                    checkers = msg.checkers,
-                    notice = null,
-                    // No game at all means it was cancelled (the other player left): say so in the chat.
-                    lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
-                        msg.othello == null && msg.checkers == null
-                    ) {
-                        connected.lines + ChatLine("server", msg.text, system = true)
-                    } else {
-                        connected.lines
-                    },
-                )
-                "error" -> connected.copy(notice = msg.text)
-                else -> connected.copy(
-                    lines = connected.lines + ChatLine(msg.from, msg.text, system = msg.type == "system"),
-                )
+    /** Called (on a background thread) for every message the server sends. */
+    private fun onMessage(session: ActiveSession, msg: ServerMessage) {
+        if (active !== session) return // we have left that room already
+        if (msg.type == "session") {
+            session.sawSession = true
+            val token = msg.token ?: return
+            if (token != session.token) {
+                session.token = token
+                // Remember the seat so the app can rejoin it after being closed or killed.
+                viewModelScope.launch { store.saveSession(SavedSession(session.server, session.name, session.room, token)) }
             }
+            _room.update { it?.copy(state = ConnectionState.Connected, closeReason = null, opponentOffline = null) }
+            return
         }
-        is ChatEvent.Closed -> room.copy(state = ConnectionState.Closed, closeReason = event.reason)
+        _room.update { current -> current?.let { applyMessage(it, msg, session.name) } }
+    }
+
+    private fun applyMessage(room: RoomUi, msg: ServerMessage, myName: String): RoomUi = when (msg.type) {
+        "history" -> room.copy(
+            lines = msg.history.orEmpty().map { h ->
+                ChatLine(from = h.from, text = h.text, system = h.type == "system", mine = h.type == "chat" && h.from == myName)
+            },
+        )
+        "presence" -> when {
+            msg.from == myName -> room
+            msg.text == "offline" -> room.copy(opponentOffline = msg.from)
+            else -> room.copy(opponentOffline = null)
+        }
+        "game" -> room.copy(
+            game = msg.state,
+            battle = msg.battle,
+            connect = msg.connect,
+            othello = msg.othello,
+            checkers = msg.checkers,
+            notice = null,
+            // No game at all means it was cancelled (the other player left): say so in the chat.
+            lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
+                msg.othello == null && msg.checkers == null
+            ) {
+                room.lines + ChatLine("server", msg.text, system = true)
+            } else {
+                room.lines
+            },
+        )
+        "error" -> room.copy(notice = msg.text)
+        else -> room.copy(lines = room.lines + ChatLine(msg.from, msg.text, system = msg.type == "system"))
+    }
+
+    /** The session is over for good: show why, forget the saved seat. */
+    private fun giveUp(session: ActiveSession, reason: String?) {
+        if (active !== session) return
+        _room.update { it?.copy(state = ConnectionState.Closed, closeReason = friendly(reason), opponentOffline = null) }
+        viewModelScope.launch { store.clearSession() }
+    }
+
+    private fun friendly(reason: String?): String = when (reason) {
+        null -> "Connection lost"
+        "Session expired" -> "This room is gone: the other player left, or you were away for too long."
+        else -> reason
     }
 
     fun sendMessage(text: String) {
         val trimmed = text.trim()
         val me = settings.value?.name ?: return
         if (trimmed.isEmpty() || _room.value?.state != ConnectionState.Connected) return
-        outgoing?.trySend(ClientMessage(type = "chat", text = trimmed))
+        active?.outgoing?.trySend(ClientMessage(type = "chat", text = trimmed))
         // The server only relays to the *other* player, so show our own message locally.
         _room.update { it?.copy(lines = it.lines + ChatLine(me, trimmed, mine = true)) }
     }
@@ -164,7 +321,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun startGame(gameId: String) {
         if (_room.value?.state != ConnectionState.Connected) return
         _room.update { it?.copy(notice = null) }
-        outgoing?.trySend(ClientMessage(type = "startGame", game = gameId))
+        active?.outgoing?.trySend(ClientMessage(type = "startGame", game = gameId))
     }
 
     /**
@@ -174,32 +331,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun playCell(cell: Int) {
         if (_room.value?.state != ConnectionState.Connected) return
-        outgoing?.trySend(ClientMessage(type = "move", cell = cell))
+        active?.outgoing?.trySend(ClientMessage(type = "move", cell = cell))
     }
 
     /** Checkers: moves the piece on square [from] to square [to] (one step or one jump, squares 0..63). */
     fun movePiece(from: Int, to: Int) {
         if (_room.value?.state != ConnectionState.Connected) return
-        outgoing?.trySend(ClientMessage(type = "move", from = from, to = to))
+        active?.outgoing?.trySend(ClientMessage(type = "move", from = from, to = to))
     }
 
     /** Battleship: sends the whole fleet, one list of cells per ship. Can only be done once per game. */
     fun placeFleet(ships: List<List<Int>>) {
         if (_room.value?.state != ConnectionState.Connected) return
         _room.update { it?.copy(notice = null) }
-        outgoing?.trySend(ClientMessage(type = "place", ships = ships.map { ShipPlacement(it) }))
+        active?.outgoing?.trySend(ClientMessage(type = "place", ships = ships.map { ShipPlacement(it) }))
     }
 
+    /** Leaves the room for good: the seat is freed on the server, and the saved seat is forgotten. */
     fun leaveRoom() {
-        session?.cancel()
-        session = null
-        outgoing?.close()
-        outgoing = null
+        val session = active
+        active = null
         _room.value = null
+        viewModelScope.launch { store.clearSession() }
+        if (session == null) return
+
+        session.left = true
+        session.outgoing.trySend(ClientMessage(type = "leave"))
+        session.outgoing.close()
+        // The server closes the connection once it sees "leave"; make sure it is gone even if that message is lost.
+        viewModelScope.launch {
+            delay(2_000)
+            session.job?.cancel()
+        }
     }
 
     override fun onCleared() {
-        leaveRoom()
+        network.stop()
+        // The app is going away, not the player: drop the connection without saying goodbye, so the seat is held
+        // on the server and the app can take it back the next time it opens.
+        active?.job?.cancel()
         client.close()
     }
 }

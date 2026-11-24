@@ -31,7 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.classicgames.app.data.BattleState
+import com.classicgames.core.BattleState
 import kotlin.random.Random
 
 private const val SIZE = 10
@@ -127,14 +127,14 @@ private fun PlacementEditor(battle: BattleState, onPlaceFleet: (List<List<Int>>)
                 selected = selected == i,
                 onClick = { selected = i },
                 label = { Text("${SHIP_NAMES[i]} (${FLEET[i]})") },
-                leadingIcon = if (i in placed) ({ Text("✓") }) else null,
+                leadingIcon = if (i in placed) ({ Text("âœ“") }) else null,
             )
         }
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { horizontal = !horizontal }) {
-            Text(if (horizontal) "Direction: →" else "Direction: ↓")
+            Text(if (horizontal) "Direction: â†’" else "Direction: â†“")
         }
         OutlinedButton(onClick = { placed = randomFleet(); problem = null }) { Text("Random") }
         OutlinedButton(onClick = { placed = emptyMap(); selected = 0; problem = null }) { Text("Reset") }
@@ -230,9 +230,9 @@ private fun BoardLabel(label: Any, modifier: Modifier) {
 private fun SeaCell(mark: Char, enabled: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val (color, label) = when (mark) {
         'S' -> ShipColor to ""
-        'H' -> HitColor to "✕"
-        'X' -> SunkColor to "✕"
-        'M' -> MissColor to "•"
+        'H' -> HitColor to "âœ•"
+        'X' -> SunkColor to "âœ•"
+        'M' -> MissColor to "â€¢"
         else -> WaterColor to ""
     }
     Box(

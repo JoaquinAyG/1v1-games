@@ -1,5 +1,8 @@
 package com.classicgames.app.data
 
+import com.classicgames.core.ClientMessage
+import com.classicgames.core.ServerMessage
+import com.classicgames.core.protocolJson
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -8,22 +11,30 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.launch
 
-sealed interface ChatEvent {
-    data class Received(val message: ServerMessage) : ChatEvent
-    /** The connection ended. [reason] is the server's explanation (e.g. "Room is full"), if any. */
-    data class Closed(val reason: String?) : ChatEvent
+/** How one connection to a room ended. */
+sealed interface SessionEnd {
+    /** We said goodbye on purpose and the server confirmed. */
+    data object Left : SessionEnd
+
+    /** The server refused us (bad room or name, full room, expired seat): trying again won't help. */
+    data class Rejected(val reason: String) : SessionEnd
+
+    /** The connection broke or could not be made: worth trying again. */
+    data class Dropped(val reason: String?) : SessionEnd
 }
 
 /** Talks to the game server: creates room codes and keeps one room connection open. */
 class ChatClient {
     private val http = HttpClient(OkHttp) {
-        install(WebSockets) { pingIntervalMillis = 15_000 }
+        // Pings let us notice a dead connection (a lost Wi-Fi) within seconds instead of minutes.
+        install(WebSockets) { pingIntervalMillis = 10_000 }
         install(HttpTimeout) { connectTimeoutMillis = 5_000 }
     }
 
@@ -35,16 +46,19 @@ class ChatClient {
     }
 
     /**
-     * Joins [room] and runs until the connection closes or the calling coroutine is cancelled.
-     * Everything received from [outgoing] is sent to the room.
+     * Connects to [room] once and runs until that connection ends or the calling coroutine is cancelled.
+     * Pass the seat [token] to take an existing seat back after a dropped connection.
+     * Everything received from [outgoing] is sent to the room; everything the server sends goes to [onMessage].
      */
     suspend fun runSession(
         server: String,
         name: String,
         room: String,
+        token: String?,
         outgoing: ReceiveChannel<ClientMessage>,
-        onEvent: (ChatEvent) -> Unit,
-    ) {
+        onMessage: (ServerMessage) -> Unit,
+    ): SessionEnd {
+        var end: SessionEnd = SessionEnd.Dropped(null)
         try {
             http.webSocket(
                 urlString = "ws://${normalize(server)}/ws",
@@ -52,6 +66,7 @@ class ChatClient {
                     url {
                         parameters.append("name", name)
                         parameters.append("room", room)
+                        if (token != null) parameters.append("token", token)
                     }
                 },
             ) {
@@ -65,18 +80,25 @@ class ChatClient {
                         if (frame !is Frame.Text) continue
                         runCatching {
                             protocolJson.decodeFromString(ServerMessage.serializer(), frame.readText())
-                        }.onSuccess { onEvent(ChatEvent.Received(it)) }
+                        }.onSuccess(onMessage)
                     }
                 } finally {
                     sender.cancel()
                 }
-                onEvent(ChatEvent.Closed(closeReason.await()?.message?.takeIf { it.isNotBlank() }))
+                val reason = runCatching { closeReason.await() }.getOrNull()
+                end = when {
+                    reason?.code == CloseReason.Codes.VIOLATED_POLICY.code ->
+                        SessionEnd.Rejected(reason.message.ifBlank { "The server refused the connection" })
+                    reason?.code == CloseReason.Codes.NORMAL.code && reason.message == "Left" -> SessionEnd.Left
+                    else -> SessionEnd.Dropped(reason?.message?.takeIf { it.isNotBlank() })
+                }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            onEvent(ChatEvent.Closed(e.message ?: "Connection failed"))
+            end = SessionEnd.Dropped(e.message ?: "Connection failed")
         }
+        return end
     }
 
     fun close() = http.close()

@@ -82,6 +82,7 @@ fun ChatScreen(
                     when (room.state) {
                         ConnectionState.Connecting -> "Connecting..."
                         ConnectionState.Connected -> "Share this code with your friend"
+                        ConnectionState.Reconnecting -> "Connection lost. Reconnecting..."
                         ConnectionState.Closed -> "Disconnected"
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -104,6 +105,21 @@ fun ChatScreen(
             }
         }
 
+        // The other player's connection dropped: the server holds their seat and the game for a while.
+        room.opponentOffline?.takeIf { connected }?.let { name ->
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                shape = CardShape,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    "$name lost their connection. Waiting for them to come back...",
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
+        }
+
         val tictactoe = room.game
         val battle = room.battle
         val connect = room.connect
@@ -112,7 +128,8 @@ fun ChatScreen(
         // Battleship needs lots of room, so its card takes what it needs and the chat shrinks to a short strip.
         val battleActive = battle != null
 
-        if (connected) {
+        // Keep showing the game while reconnecting: it is still there, we just can't play until we are back.
+        if (connected || room.state == ConnectionState.Reconnecting) {
             AppCard(
                 Modifier
                     .fillMaxWidth()

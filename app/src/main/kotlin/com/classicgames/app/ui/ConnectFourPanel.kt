@@ -23,7 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.classicgames.app.data.ConnectState
+import com.classicgames.core.ConnectState
 
 private const val COLUMNS = 7
 private const val ROWS = 6
