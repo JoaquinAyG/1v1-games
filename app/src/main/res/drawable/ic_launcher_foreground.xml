@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon foreground: a white rounded tile with the Tic-Tac-Toe board, inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M39,27h30a12,12 0 0,1 12,12v30a12,12 0 0,1 -12,12h-30a12,12 0 0,1 -12,-12v-30a12,12 0 0,1 12,-12z" />
+    <!-- # grid -->
+    <path
+        android:pathData="M47.33,33.5V74.5M60.67,33.5V74.5M33.5,47.33H74.5M33.5,60.67H74.5"
+        android:strokeColor="#FFB0BCBF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+    <!-- X, top-left and bottom-right -->
+    <path
+        android:pathData="M36,36L45.4,45.4M45.4,36L36,45.4M62.6,62.6L72,72M72,62.6L62.6,72"
+        android:strokeColor="#FF0F766E"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round" />
+    <!-- O, centre -->
+    <path
+        android:pathData="M58.6,54a4.6,4.6 0 1,0 -9.2,0a4.6,4.6 0 1,0 9.2,0"
+        android:strokeColor="#FFD98324"
+        android:strokeWidth="2.8" />
+</vector>
