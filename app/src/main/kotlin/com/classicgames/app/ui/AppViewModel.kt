@@ -16,11 +16,20 @@ import com.classicgames.app.data.SettingsStore
 import com.classicgames.app.server.PhoneServer
 import com.classicgames.app.server.PhoneServerState
 import com.classicgames.core.BattleState
+import com.classicgames.core.BriscaState
 import com.classicgames.core.CheckersState
 import com.classicgames.core.ClientMessage
 import com.classicgames.core.ConnectState
+import com.classicgames.core.DotsState
 import com.classicgames.core.GameState
+import com.classicgames.core.HanabiState
+import com.classicgames.core.HexState
+import com.classicgames.core.MastermindState
+import com.classicgames.core.MazeState
+import com.classicgames.core.MemoryState
 import com.classicgames.core.OthelloState
+import com.classicgames.core.OwareState
+import com.classicgames.core.QuartoState
 import com.classicgames.core.ServerMessage
 import com.classicgames.core.ShipPlacement
 import kotlinx.coroutines.Job
@@ -66,6 +75,24 @@ data class RoomUi(
     val othello: OthelloState? = null,
     /** The Checkers game running in this room, if any. */
     val checkers: CheckersState? = null,
+    /** The Dots and Boxes game running in this room, if any. */
+    val dots: DotsState? = null,
+    /** The Oware game running in this room, if any. */
+    val oware: OwareState? = null,
+    /** The Mastermind game running in this room, if any (as this player sees it). */
+    val mastermind: MastermindState? = null,
+    /** The Hex game running in this room, if any. */
+    val hex: HexState? = null,
+    /** The Memory game running in this room, if any. */
+    val memory: MemoryState? = null,
+    /** The Quarto game running in this room, if any. */
+    val quarto: QuartoState? = null,
+    /** The Brisca game running in this room, if any (as this player sees it). */
+    val brisca: BriscaState? = null,
+    /** The Maze Guide game running in this room, if any (as this player sees it). */
+    val maze: MazeState? = null,
+    /** The Hanabi game running in this room, if any (as this player sees it). */
+    val hanabi: HanabiState? = null,
     /** The game whose tile was tapped in the lobby to host this room; the room offers it first. */
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
@@ -284,10 +311,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             connect = msg.connect,
             othello = msg.othello,
             checkers = msg.checkers,
+            dots = msg.dots,
+            oware = msg.oware,
+            mastermind = msg.mastermind,
+            hex = msg.hex,
+            memory = msg.memory,
+            quarto = msg.quarto,
+            brisca = msg.brisca,
+            maze = msg.maze,
+            hanabi = msg.hanabi,
             notice = null,
             // No game at all means it was cancelled (the other player left): say so in the chat.
             lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
-                msg.othello == null && msg.checkers == null
+                msg.othello == null && msg.checkers == null && msg.dots == null && msg.oware == null &&
+                msg.mastermind == null && msg.hex == null && msg.memory == null && msg.quarto == null &&
+                msg.brisca == null && msg.maze == null && msg.hanabi == null
             ) {
                 room.lines + ChatLine("server", msg.text, system = true)
             } else {
@@ -330,6 +368,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Plays [cell]. Tic-tac-toe: 0..8, row by row. Battleship: 0..99, the cell to fire at.
      * Connect Four: the column (0..6) to drop a disc into. Othello: 0..63, row by row.
+     * Dots and Boxes: the line to draw (numbered as described on [ClientMessage]).
+     * Oware: the pit to sow from (0..11 counter-clockwise, as described on [ClientMessage]).
+     * Hex: the cell to put a stone on (row * size + column, as described on [ClientMessage]).
+     * Memory: the card to flip (row * columns + column).
+     * Quarto: the cell (0..15, row by row) to put the piece you were given on.
      * The server validates it and answers with the new state.
      */
     fun playCell(cell: Int) {
@@ -348,6 +391,64 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_room.value?.state != ConnectionState.Connected) return
         _room.update { it?.copy(notice = null) }
         active?.outgoing?.trySend(ClientMessage(type = "place", ships = ships.map { ShipPlacement(it) }))
+    }
+
+    /** Mastermind: sets the code the opponent has to crack (one colour 0..5 per peg). Can only be done once per game. */
+    fun setSecretCode(code: List<Int>) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        _room.update { it?.copy(notice = null) }
+        active?.outgoing?.trySend(ClientMessage(type = "secret", code = code))
+    }
+
+    /** Mastermind: guesses the opponent's code (one colour 0..5 per peg). */
+    fun guessCode(code: List<Int>) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", code = code))
+    }
+
+    /** Quarto: hands [piece] (0..15, one bit per trait, see QuartoState) from the pool to the opponent. */
+    fun givePiece(piece: Int) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", piece = piece))
+    }
+
+    /** Brisca: plays [card] (0..39, suit * 10 + rank, see BriscaState) from your hand. */
+    fun playCard(card: Int) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", card = card))
+    }
+
+    /** Brisca: swaps the 7 of trumps in your hand for the face-up trump, before playing your card. */
+    fun swapSeven() {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "swap7"))
+    }
+
+    /** Maze Guide, as the walker: steps one cell "up", "down", "left" or "right". */
+    fun moveWalker(direction: String) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", direction = direction))
+    }
+
+    /** Maze Guide, as the guide: tells the walker to go "up", "down", "left" or "right". */
+    fun sendHint(direction: String) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "hint", direction = direction))
+    }
+
+    /**
+     * Hanabi: [action] "play" or "discard" the [card] at that position in your hand, or "hint" a [color] (0..4) or a
+     * [number] (1..5) in your partner's hand.
+     */
+    fun hanabiAction(action: String, card: Int?, color: Int?, number: Int?) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", action = action, card = card, color = color, number = number))
+    }
+
+    /** Hex: instead of placing a stone on your first turn as the second player, take over the first stone. */
+    fun swapHex() {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "swap"))
     }
 
     /** Leaves the room for good: the seat is freed on the server, and the saved seat is forgotten. */

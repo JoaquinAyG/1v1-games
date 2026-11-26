@@ -194,7 +194,9 @@ class Hub(private val scope: CoroutineScope, private val graceMillis: Long = DEF
         if (room.game?.finished == false) return GameOutcome.Rejected("A game is already in progress")
 
         // Players take turns going first (X in tic-tac-toe, the first shot in Battleship, red in Connect Four,
-        // black in Othello, red in Checkers).
+        // black in Othello, red in Checkers, red in Dots and Boxes, south in Oware, the first guess in Mastermind,
+        // red in Hex, the first flip in Memory, the first choice of a piece in Quarto, the first lead in Brisca). In the
+        // cooperative games the roles alternate the same way (the guide in Maze Guide, the first turn in Hanabi).
         val names = room.members.keys.toList()
         val first = names[room.gamesPlayed % 2]
         val second = names[(room.gamesPlayed + 1) % 2]
@@ -203,6 +205,15 @@ class Hub(private val scope: CoroutineScope, private val graceMillis: Long = DEF
             Battleship.ID -> Battleship(first, second)
             ConnectFour.ID -> ConnectFour(first, second)
             Othello.ID -> Othello(first, second)
+            DotsAndBoxes.ID -> DotsAndBoxes(first, second)
+            Oware.ID -> Oware(first, second)
+            Mastermind.ID -> Mastermind(first, second)
+            Hex.ID -> Hex(first, second)
+            Memory.ID -> Memory(first, second)
+            Quarto.ID -> Quarto(first, second)
+            Brisca.ID -> Brisca(first, second)
+            Maze.ID -> Maze(first, second)
+            Hanabi.ID -> Hanabi(first, second)
             else -> Checkers(first, second)
         }
         room.gamesPlayed++
@@ -277,4 +288,7 @@ class Hub(private val scope: CoroutineScope, private val graceMillis: Long = DEF
 }
 
 /** Ids a client may send in "startGame". */
-private val KNOWN_GAMES = setOf(TicTacToe.ID, Battleship.ID, ConnectFour.ID, Othello.ID, Checkers.ID)
+private val KNOWN_GAMES = setOf(
+    TicTacToe.ID, Battleship.ID, ConnectFour.ID, Othello.ID, Checkers.ID, DotsAndBoxes.ID, Oware.ID, Mastermind.ID,
+    Hex.ID, Memory.ID, Quarto.ID, Brisca.ID, Maze.ID, Hanabi.ID,
+)

@@ -3,11 +3,13 @@ package com.classicgames.app.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -33,6 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,6 +50,15 @@ fun ChatScreen(
     onCell: (Int) -> Unit,
     onPlaceFleet: (List<List<Int>>) -> Unit,
     onMovePiece: (from: Int, to: Int) -> Unit,
+    onSetCode: (List<Int>) -> Unit,
+    onGuessCode: (List<Int>) -> Unit,
+    onSwap: () -> Unit,
+    onGivePiece: (Int) -> Unit,
+    onPlayCard: (Int) -> Unit,
+    onSwapSeven: () -> Unit,
+    onMoveWalker: (String) -> Unit,
+    onHint: (String) -> Unit,
+    onHanabi: (action: String, card: Int?, color: Int?, number: Int?) -> Unit,
     onLeave: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
@@ -125,8 +138,21 @@ fun ChatScreen(
         val connect = room.connect
         val othello = room.othello
         val checkers = room.checkers
+        val dots = room.dots
+        val oware = room.oware
+        val mastermind = room.mastermind
+        val hex = room.hex
+        val memory = room.memory
+        val quarto = room.quarto
+        val brisca = room.brisca
+        val maze = room.maze
+        val hanabi = room.hanabi
         // Battleship needs lots of room, so its card takes what it needs and the chat shrinks to a short strip.
         val battleActive = battle != null
+        // Mastermind grows with every guess, so its card stops at about 60% of the window and scrolls inside, and
+        // the chat keeps the rest.
+        val mastermindMaxHeight =
+            with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.height * 0.6f).toDp() }
 
         // Keep showing the game while reconnecting: it is still there, we just can't play until we are back.
         if (connected || room.state == ConnectionState.Reconnecting) {
@@ -134,7 +160,13 @@ fun ChatScreen(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
-                    .then(if (battleActive) Modifier.weight(1f, fill = false) else Modifier),
+                    .then(
+                        when {
+                            battleActive -> Modifier.weight(1f, fill = false)
+                            mastermind != null -> Modifier.heightIn(max = mastermindMaxHeight)
+                            else -> Modifier
+                        },
+                    ),
             ) {
                 when {
                     tictactoe != null -> TicTacToePanel(
@@ -175,6 +207,79 @@ fun ChatScreen(
                         notice = room.notice,
                         onMove = onMovePiece,
                         onPlayAgain = { onStartGame("checkers") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    dots != null -> DotsAndBoxesPanel(
+                        game = dots,
+                        myName = myName,
+                        notice = room.notice,
+                        onLine = onCell,
+                        onPlayAgain = { onStartGame("dotsandboxes") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    oware != null -> OwarePanel(
+                        game = oware,
+                        myName = myName,
+                        notice = room.notice,
+                        onPit = onCell,
+                        onPlayAgain = { onStartGame("oware") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    mastermind != null -> MastermindPanel(
+                        game = mastermind,
+                        notice = room.notice,
+                        onSetCode = onSetCode,
+                        onGuess = onGuessCode,
+                        onPlayAgain = { onStartGame("mastermind") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    hex != null -> HexPanel(
+                        game = hex,
+                        myName = myName,
+                        notice = room.notice,
+                        onCell = onCell,
+                        onSwap = onSwap,
+                        onPlayAgain = { onStartGame("hex") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    memory != null -> MemoryPanel(
+                        game = memory,
+                        myName = myName,
+                        notice = room.notice,
+                        onCard = onCell,
+                        onPlayAgain = { onStartGame("memory") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    quarto != null -> QuartoPanel(
+                        game = quarto,
+                        myName = myName,
+                        notice = room.notice,
+                        onCell = onCell,
+                        onGive = onGivePiece,
+                        onPlayAgain = { onStartGame("quarto") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    brisca != null -> BriscaPanel(
+                        game = brisca,
+                        notice = room.notice,
+                        onCard = onPlayCard,
+                        onSwapSeven = onSwapSeven,
+                        onPlayAgain = { onStartGame("brisca") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    maze != null -> MazePanel(
+                        game = maze,
+                        notice = room.notice,
+                        onMove = onMoveWalker,
+                        onHint = onHint,
+                        onPlayAgain = { onStartGame("maze") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    hanabi != null -> HanabiPanel(
+                        game = hanabi,
+                        notice = room.notice,
+                        onAction = onHanabi,
+                        onPlayAgain = { onStartGame("hanabi") },
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
                     else -> GamePicker(room.preferredGame, room.notice, onStartGame)
@@ -235,21 +340,31 @@ fun ChatScreen(
     }
 }
 
-/** Shown when no game is running: one button per game, the one hosted from the lobby first. */
+/**
+ * Shown when no game is running: the game hosted from the lobby (or the first one) as the main button, then the
+ * others. They wrap onto as few lines as fit, so even with a dozen games the chat still keeps most of the screen.
+ */
 @Composable
 private fun GamePicker(preferred: String?, notice: String?, onStart: (String) -> Unit) {
     val playable = GAMES.filter { it.icon != null }.sortedByDescending { it.id == preferred }
+    val main = playable.first()
     Column(
         modifier = Modifier.fillMaxWidth().padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Pick a game", style = MaterialTheme.typography.titleSmall)
-        playable.forEachIndexed { i, game ->
-            if (i == 0) {
-                Button(onClick = { onStart(game.id) }) { Text("Play ${game.title}") }
-            } else {
-                OutlinedButton(onClick = { onStart(game.id) }) { Text("Play ${game.title}") }
+        Button(onClick = { onStart(main.id) }) { Text("Play ${main.title}") }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            for (game in playable.drop(1)) {
+                OutlinedButton(
+                    onClick = { onStart(game.id) },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                ) { Text(game.title) }
             }
         }
         notice?.let {
