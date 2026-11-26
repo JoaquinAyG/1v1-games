@@ -3,6 +3,7 @@ package com.classicgames.app.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -297,21 +298,31 @@ fun ChatScreen(
     }
 }
 
-/** Shown when no game is running: one button per game, the one hosted from the lobby first. */
+/**
+ * Shown when no game is running: the game hosted from the lobby (or the first one) as the main button, then the
+ * others. They wrap onto as few lines as fit, so with ten games the chat still keeps most of the screen.
+ */
 @Composable
 private fun GamePicker(preferred: String?, notice: String?, onStart: (String) -> Unit) {
     val playable = GAMES.filter { it.icon != null }.sortedByDescending { it.id == preferred }
+    val main = playable.first()
     Column(
         modifier = Modifier.fillMaxWidth().padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Pick a game", style = MaterialTheme.typography.titleSmall)
-        playable.forEachIndexed { i, game ->
-            if (i == 0) {
-                Button(onClick = { onStart(game.id) }) { Text("Play ${game.title}") }
-            } else {
-                OutlinedButton(onClick = { onStart(game.id) }) { Text("Play ${game.title}") }
+        Button(onClick = { onStart(main.id) }) { Text("Play ${main.title}") }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            for (game in playable.drop(1)) {
+                OutlinedButton(
+                    onClick = { onStart(game.id) },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                ) { Text(game.title) }
             }
         }
         notice?.let {
