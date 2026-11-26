@@ -51,6 +51,7 @@ fun ChatScreen(
     onMovePiece: (from: Int, to: Int) -> Unit,
     onSetCode: (List<Int>) -> Unit,
     onGuessCode: (List<Int>) -> Unit,
+    onSwap: () -> Unit,
     onLeave: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
@@ -133,6 +134,7 @@ fun ChatScreen(
         val dots = room.dots
         val oware = room.oware
         val mastermind = room.mastermind
+        val hex = room.hex
         // Battleship needs lots of room, so its card takes what it needs and the chat shrinks to a short strip.
         val battleActive = battle != null
         // Mastermind grows with every guess, so its card stops at about 60% of the window and scrolls inside, and
@@ -217,6 +219,15 @@ fun ChatScreen(
                         onSetCode = onSetCode,
                         onGuess = onGuessCode,
                         onPlayAgain = { onStartGame("mastermind") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    hex != null -> HexPanel(
+                        game = hex,
+                        myName = myName,
+                        notice = room.notice,
+                        onCell = onCell,
+                        onSwap = onSwap,
+                        onPlayAgain = { onStartGame("hex") },
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
                     else -> GamePicker(room.preferredGame, room.notice, onStartGame)

@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -56,6 +57,7 @@ val GAMES = listOf(
     GameEntry(id = "dotsandboxes", title = "Dots and Boxes", icon = { DotsAndBoxesIcon() }),
     GameEntry(id = "oware", title = "Oware", icon = { OwareIcon() }),
     GameEntry(id = "mastermind", title = "Mastermind", icon = { MastermindIcon() }),
+    GameEntry(id = "hex", title = "Hex", icon = { HexIcon() }),
 )
 
 /** Lays the games out in rows of [columns] tiles. Gaps in the last row stay empty so tiles keep their size. */
@@ -338,6 +340,25 @@ fun MastermindIcon(modifier: Modifier = Modifier) {
                 }
                 drawCircle(color, radius = keyR, center = center)
             }
+        }
+    }
+}
+
+/** A small Hex board with red and blue sides and a red chain about to join top and bottom, drawn like the real one. */
+@Composable
+fun HexIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxSize().padding(12.dp)) {
+        val n = 4
+        val geometry = HexGeometry(size.width, n)
+        translate(top = (size.height - geometry.height) / 2f) {
+            drawHexBoard(
+                geometry,
+                n,
+                board = ".R.B" +
+                    "BR.." +
+                    ".RB." +
+                    "....",
+            )
         }
     }
 }
