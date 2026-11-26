@@ -42,9 +42,10 @@ fun LobbyScreen(viewModel: AppViewModel, onRequestNotifications: () -> Unit) {
     val phoneServer by viewModel.phoneServer.collectAsStateWithLifecycle()
     val saved = settings ?: return // still loading the saved profile
 
-    // Editable copies of the saved values; reset whenever the saved values change.
-    var name by rememberSaveable(saved) { mutableStateOf(saved.name) }
-    var server by rememberSaveable(saved) { mutableStateOf(saved.server) }
+    // Editable copies of the saved values. Each is reset only when its own saved value changes, so that flipping the
+    // hosting switch doesn't throw away what has been typed but not saved yet.
+    var name by rememberSaveable(saved.name) { mutableStateOf(saved.name) }
+    var server by rememberSaveable(saved.server) { mutableStateOf(saved.server) }
     var code by rememberSaveable { mutableStateOf("") }
 
     // With the server on this phone there is no address to type; we just wait for the server to be up.
