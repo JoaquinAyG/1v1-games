@@ -1020,6 +1020,144 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun hanabiOverWebSocketPlaysAWholeGameWithoutShowingAnyoneTheirOwnCards() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+        fun play(card: Int) = ClientMessage(type = "move", action = "play", card = card)
+        fun discard(card: Int) = ClientMessage(type = "move", action = "discard", card = card)
+        fun hintColor(color: Int) = ClientMessage(type = "move", action = "hint", color = color)
+        fun hintNumber(number: Int) = ClientMessage(type = "move", action = "hint", number = number)
+        fun knowledge(hand: List<HanabiCard>) = hand.map { listOf(it.knownColor, it.knownNumber, it.notColors, it.notNumbers) }
+
+        client.webSocket("/ws?name=Ann&room=HANABI") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=HANABI") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                var version = 0L
+
+                /**
+                 * Reads the update both players get for one change: each their own view, with the same newer version.
+                 * Checks that the views agree on everything public, that nobody sees their own cards, and that what
+                 * each player knows about their hand is what the other sees them knowing.
+                 */
+                suspend fun update(): Pair<HanabiState, HanabiState> {
+                    val a = ann.next()
+                    val b = bob.next()
+                    assertEquals(a.version, b.version)
+                    assertTrue(a.version > version)
+                    version = a.version
+                    val sa = a.hanabi!!
+                    val sb = b.hanabi!!
+                    assertEquals("Ann", sa.you)
+                    assertEquals("Bob", sb.you)
+                    for (field in listOf<(HanabiState) -> Any>(
+                        { it.fireworks }, { it.discards }, { it.hints }, { it.lives }, { it.deckSize }, { it.status },
+                        { it.score }, { it.turnsLeft }, { it.result },
+                    )) assertEquals(field(sa), field(sb))
+                    assertTrue(sa.yourHand.all { it.color == -1 && it.number == 0 })
+                    assertTrue(sb.yourHand.all { it.color == -1 && it.number == 0 })
+                    assertEquals(knowledge(sa.yourHand), knowledge(sb.partnerHand))
+                    assertEquals(knowledge(sb.yourHand), knowledge(sa.partnerHand))
+                    assertEquals(sa.hintedYours, sb.hintedPartners)
+                    assertEquals(sb.hintedYours, sa.hintedPartners)
+                    return sa to sb
+                }
+
+                ann.say(ClientMessage(type = "startGame", game = "hanabi"))
+                var (a, b) = update()
+                assertEquals("Ann", a.firstPlayer)
+                assertTrue(a.yourTurn)
+                assertEquals(40, a.deckSize)
+
+                bob.say(hintColor(b.partnerHand[0].color))
+                assertEquals("Not your turn", bob.next().text)
+                ann.say(discard(0))
+                assertEquals("All 8 hint tokens are there: give a hint or play instead", ann.next().text)
+                ann.say(ClientMessage(type = "move", action = "hint", color = 0, number = 1))
+                assertEquals("Hint one colour or one number", ann.next().text)
+                (0..4).firstOrNull { color -> a.partnerHand.none { it.color == color } }?.let { missing ->
+                    ann.say(hintColor(missing))
+                    assertEquals("That hint points at none of Bob's cards", ann.next().text)
+                }
+
+                // Both play the same way: play a card known to fit; else point out a card of the partner's that fits;
+                // else discard the oldest card nothing is known about; else hint the colour of the partner's first card.
+                var actions = 0
+                var lastRound = emptyList<Int>()
+                while (a.status == "playing") {
+                    val (me, s) = if (a.yourTurn) ann to a else bob to b
+                    val mine = s.yourHand.indexOfFirst { it.knownColor >= 0 && it.knownNumber > 0 && s.fireworks[it.knownColor] == it.knownNumber - 1 }
+                    val theirs = s.partnerHand.firstOrNull { s.fireworks[it.color] == it.number - 1 && (it.knownColor < 0 || it.knownNumber == 0) }
+                    val unknown = s.yourHand.indexOfFirst { it.knownColor < 0 && it.knownNumber == 0 }.coerceAtLeast(0)
+                    me.say(
+                        when {
+                            mine >= 0 -> play(mine)
+                            theirs != null && s.hints > 0 -> if (theirs.knownNumber == 0) hintNumber(theirs.number) else hintColor(theirs.color)
+                            s.hints < 8 -> discard(unknown)
+                            else -> hintColor(s.partnerHand[0].color)
+                        },
+                    )
+                    update().let { (x, y) -> a = x; b = y }
+                    if (a.deckSize == 0) lastRound = lastRound + a.turnsLeft
+                    assertTrue(++actions < 120, "the game never ended")
+                }
+                assertTrue(a.status == "finished" || a.status == "won" || a.status == "lost", a.status)
+                if (a.status == "finished") {
+                    // The turn that drew the last card, then exactly one more each.
+                    assertEquals(listOf(2, 1, 0), lastRound)
+                    assertEquals("The deck ran out: ${a.score} out of 25", a.result)
+                }
+                assertTrue(a.score > 0, "the bot should get some fireworks up")
+                assertEquals(a.fireworks.sum(), b.score)
+
+                ann.say(play(0))
+                assertEquals("The game is over", ann.next().text)
+
+                // Play again: Bob goes first. Then Ann leaves in the middle.
+                ann.say(ClientMessage(type = "startGame", game = "hanabi"))
+                update().let { (x, y) -> a = x; b = y }
+                assertEquals("Bob", b.firstPlayer)
+                assertTrue(b.yourTurn)
+                bob.say(hintNumber(b.partnerHand[0].number))
+                update().let { (x, y) -> a = x; b = y }
+                assertEquals("Bob hinted your ${b.partnerHand[0].number}s", a.lastAction)
+                ann.say(ClientMessage(type = "leave"))
+            }
+        }
+    }
+
+    @Test
+    fun aCooperativeGameEndsForThePartnerWhenOneLeaves() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+
+        client.webSocket("/ws?name=Ann&room=TOGETHER") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=TOGETHER") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+                ann.say(ClientMessage(type = "startGame", game = "hanabi"))
+                ann.next(); bob.next()
+                bob.say(ClientMessage(type = "leave"))
+            }
+            assertEquals("Bob left", ann.next().text)
+            val ended = ann.next()
+            assertEquals("game", ended.type)
+            assertNull(ended.hanabi)
+            assertEquals("Game ended because Bob left", ended.text)
+            // The room is still Ann's: once someone joins she can start a new game.
+            ann.say(ClientMessage(type = "move", action = "play", card = 0))
+            assertEquals("No game in progress", ann.next().text)
+        }
+    }
+
+    @Test
     fun longChatMessagesAreCut() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }

@@ -14,7 +14,7 @@ data class ShipPlacement(val cells: List<Int>)
  *  - "leave":     goodbye for good: the seat is freed at once (without it, a dropped connection keeps the seat
  *                 for a while so the player can come back)
  *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello", "checkers", "dotsandboxes",
- *                 "oware", "mastermind", "hex", "memory", "quarto", "brisca" or "maze")
+ *                 "oware", "mastermind", "hex", "memory", "quarto", "brisca", "maze" or "hanabi")
  *  - "move":      [cell] (tic-tac-toe: 0..8 row by row; battleship: 0..99 row by row, the cell to fire at;
  *                 connect four: the column 0..6 to drop a disc into; othello: 0..63 row by row;
  *                 dots and boxes: the line to draw, see below; oware: the pit to sow from, see below;
@@ -24,7 +24,10 @@ data class ShipPlacement(val cells: List<Int>)
  *                 or [card] (brisca: the card 0..39 from your hand to play, numbered as on [BriscaState]),
  *                 or [from] and [to] (checkers: 0..63 row by row, one step or one jump),
  *                 or [code] (mastermind: your guess at the opponent's code),
- *                 or [direction] (maze: the walker's step, "up", "down", "left" or "right")
+ *                 or [direction] (maze: the walker's step, "up", "down", "left" or "right"),
+ *                 or [action] (hanabi: "hint" with [color] 0..4 or [number] 1..5, exactly one of them, for your
+ *                 partner's hand; "discard" or "play" with [card], the position 0.. of the card in your own hand, as
+ *                 listed in [HanabiState.yourHand])
  *  - "place":     [ships] (battleship: your whole fleet, once)
  *  - "secret":    [code] (mastermind: the code your opponent has to crack, once)
  *  - "swap":      nothing else (hex: the second player takes over the first stone instead of placing one, see below)
@@ -91,6 +94,9 @@ data class ClientMessage(
     val piece: Int? = null,
     val card: Int? = null,
     val direction: String? = null,
+    val action: String? = null,
+    val color: Int? = null,
+    val number: Int? = null,
 )
 
 /**
@@ -469,6 +475,68 @@ data class MazeState(
 )
 
 /**
+ * One Hanabi card in a hand or on the discard pile. [color] is 0..4 (red, yellow, green, blue, white) and [number]
+ * 1..5; in your own hand they are never sent (-1 and 0), since you can't see your own cards.
+ * For a card in a hand, the rest is what its holder has been told by hints: [knownColor] (-1 if not known) and
+ * [knownNumber] (0 if not known), and the colours and numbers it has been shown not to be ([notColors], [notNumbers]).
+ * A colour or number is also known once every other one has been ruled out. On the discard pile only [color] and
+ * [number] are set.
+ */
+@Serializable
+data class HanabiCard(
+    val color: Int = -1,
+    val number: Int = 0,
+    val knownColor: Int = -1,
+    val knownNumber: Int = 0,
+    val notColors: List<Int> = emptyList(),
+    val notNumbers: List<Int> = emptyList(),
+)
+
+/**
+ * A Hanabi game as ONE player sees it. The game is cooperative: both players win or lose together, so there is no
+ * winner, only the [status], the [score] and the [result]. Each player sees their partner's cards but never their own,
+ * and the order of the deck is never sent.
+ *
+ * Colours are numbered 0 red, 1 yellow, 2 green, 3 blue, 4 white, and cards carry a number 1..5.
+ *  - [yourHand]: your cards in order, as positions 0.. for "play" and "discard", without their colour and number, but
+ *    with what hints have told you about each (see [HanabiCard]). A drawn card goes to the end.
+ *  - [partnerHand]: your partner's cards, with their colour and number and what they have been told about them.
+ *  - [fireworks]: the highest number played on each colour's firework, by colour (0 for none yet).
+ *  - [discards]: every card discarded or misplayed, in the order it happened.
+ *  - [hints]: hint tokens left, 0..8. [lives]: lives left, 0..3. [deckSize]: cards still to be drawn.
+ *  - [yourTurn]: you must act now. [turnsLeft]: once the deck is empty, how many turns the game still has (each player
+ *    gets exactly one more, counted from the one who drew the last card); -1 while there are cards to draw.
+ *  - [status]: "playing"; "won" (all five fireworks at 5, a perfect 25); "finished" (the last round after the deck ran
+ *    out is over, [score] out of 25); or "lost" (the third life went). [score] is always the sum of the fireworks.
+ *  - [lastAction]: the last action as one line written for this player, e.g. "Ann hinted your 2s", "You played a red 3",
+ *    "Bob misplayed a blue 4: 2 lives left". [hintedYours] / [hintedPartners]: when the last action was a hint, the
+ *    positions of the cards it pointed at, in your hand or in your partner's; otherwise empty.
+ *  - [result]: how it ended in a sentence, the same for both players (empty while playing).
+ */
+@Serializable
+data class HanabiState(
+    val game: String,
+    val you: String,
+    val partner: String,
+    val firstPlayer: String,
+    val yourHand: List<HanabiCard>,
+    val partnerHand: List<HanabiCard>,
+    val fireworks: List<Int>,
+    val discards: List<HanabiCard> = emptyList(),
+    val hints: Int,
+    val lives: Int,
+    val deckSize: Int,
+    val yourTurn: Boolean,
+    val turnsLeft: Int = -1,
+    val status: String,
+    val score: Int,
+    val lastAction: String = "",
+    val hintedYours: List<Int> = emptyList(),
+    val hintedPartners: List<Int> = emptyList(),
+    val result: String = "",
+)
+
+/**
  * A Battleship game as ONE player sees it; each player gets their own version, so the opponent's
  * ships are never revealed until the game is over. Boards are 100 characters, row by row.
  *  - [phase]: "placing" (players are setting up), "playing" or "finished".
@@ -501,7 +569,7 @@ data class BattleState(
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
  *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes, [oware] for Oware,
  *              [mastermind] for Mastermind, [hex] for Hex, [memory] for Memory, [quarto] for Quarto, [brisca]
- *              for Brisca or [maze] for Maze Guide; all null means "no game any more".
+ *              for Brisca, [maze] for Maze Guide or [hanabi] for Hanabi; all null means "no game any more".
  *              [version] grows with every change to the room's game. Two changes made at nearly the same time
  *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
  *              one you applied (an equal one, as sent on reconnect, is the same state again).
@@ -535,6 +603,7 @@ data class ServerMessage(
     val quarto: QuartoState? = null,
     val brisca: BriscaState? = null,
     val maze: MazeState? = null,
+    val hanabi: HanabiState? = null,
     val token: String? = null,
     val history: List<HistoryLine>? = null,
     val version: Long = 0,

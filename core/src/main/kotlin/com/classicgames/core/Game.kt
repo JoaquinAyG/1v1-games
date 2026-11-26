@@ -4,7 +4,7 @@ package com.classicgames.core
  * A game running in a room. Implementations hold the rules and state and know nothing about sockets.
  * The Hub calls [handle] for every game-related message and then sends [messageFor] to each player,
  * so a game can hide information (like Battleship's ship positions) by giving each player a different view.
- * A game may be competitive (a winner or a draw) or cooperative (both players win or lose together, like Maze Guide):
+ * A game may be competitive (a winner or a draw) or cooperative (both players win or lose together, like Maze Guide or Hanabi):
  * the Hub only looks at [finished], and how a game ended is up to its own state.
  */
 interface Game {
