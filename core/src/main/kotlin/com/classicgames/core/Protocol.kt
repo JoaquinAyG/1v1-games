@@ -14,7 +14,7 @@ data class ShipPlacement(val cells: List<Int>)
  *  - "leave":     goodbye for good: the seat is freed at once (without it, a dropped connection keeps the seat
  *                 for a while so the player can come back)
  *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello", "checkers", "dotsandboxes",
- *                 "oware", "mastermind", "hex", "memory", "quarto" or "brisca")
+ *                 "oware", "mastermind", "hex", "memory", "quarto", "brisca" or "maze")
  *  - "move":      [cell] (tic-tac-toe: 0..8 row by row; battleship: 0..99 row by row, the cell to fire at;
  *                 connect four: the column 0..6 to drop a disc into; othello: 0..63 row by row;
  *                 dots and boxes: the line to draw, see below; oware: the pit to sow from, see below;
@@ -23,12 +23,15 @@ data class ShipPlacement(val cells: List<Int>)
  *                 or [piece] (quarto: the piece 0..15 from the pool to give your opponent, see below),
  *                 or [card] (brisca: the card 0..39 from your hand to play, numbered as on [BriscaState]),
  *                 or [from] and [to] (checkers: 0..63 row by row, one step or one jump),
- *                 or [code] (mastermind: your guess at the opponent's code)
+ *                 or [code] (mastermind: your guess at the opponent's code),
+ *                 or [direction] (maze: the walker's step, "up", "down", "left" or "right")
  *  - "place":     [ships] (battleship: your whole fleet, once)
  *  - "secret":    [code] (mastermind: the code your opponent has to crack, once)
  *  - "swap":      nothing else (hex: the second player takes over the first stone instead of placing one, see below)
  *  - "swap7":     nothing else (brisca: on your turn, before playing your card, swap the 7 of trumps in your hand for
  *                 the face-up trump under the deck; only while that card has not been drawn yet)
+ *  - "hint":      [direction] (maze: the guide tells the walker which way to go, "up", "down", "left" or "right";
+ *                 any time while playing, as often as they like)
  * A frame that is not JSON at all is treated as a chat message with that text.
  *
  * Dots and Boxes lines, on a board of n x n boxes ([DotsState.size], 5 by default) with dot rows and dot
@@ -87,6 +90,7 @@ data class ClientMessage(
     val code: List<Int>? = null,
     val piece: Int? = null,
     val card: Int? = null,
+    val direction: String? = null,
 )
 
 /**
@@ -416,6 +420,55 @@ data class BriscaState(
 )
 
 /**
+ * A Maze Guide game as ONE player sees it. The game is cooperative: both players win or lose together, so there is no
+ * winner, only the [status] and the [result].
+ *
+ * Cells are numbered row by row from the top-left: cell = row * [size] + column. A cell's walls are a bit mask with a
+ * bit set for each side that has a wall: 1 up, 2 right, 4 down, 8 left. So 15 is walled on every side, and the cells
+ * along the edge always have their outer walls.
+ *  - [role]: what [you] do, "guide" or "walker". The [guide] is the first player of the game.
+ *  - [walls] (one mask per cell), [start], [exit], [position] (the walker's cell) and [trail] (every cell the walker
+ *    has stood on, in order, from [start] to [position]): sent to the guide, and to the walker only once the game is
+ *    over. Until then the walker gets an empty [walls] and [trail], and -1 for the cells.
+ *  - [window]: the 3 x 3 cells around the walker, row by row from the top-left with the walker in the middle (index
+ *    4): each cell's walls, or -1 where the window reaches past the edge of the maze. It is all the walker sees while
+ *    playing. [windowExit] is the index in [window] of the exit when it is one of those cells, otherwise -1.
+ *  - [movesUsed] / [moveLimit]: the walker's moves so far and the most they may make, ceil(1.5 x the shortest way
+ *    out). A move into a wall is refused and not counted.
+ *  - [hint]: the direction the guide sent last, "up", "down", "left" or "right" (empty before the first); [hintAt]:
+ *    the moves used when it was sent; [hints]: how many hints have been sent in all, so a repeated direction still
+ *    shows up as a new hint.
+ *  - [status]: "playing", "won" (the walker reached the exit within the limit) or "lost" (the limit was used up first).
+ *  - [shortest]: the moves of the shortest way from the start to the exit, sent once the game is over (0 until then).
+ *  - [result]: how it ended in a sentence, the same for both players: the moves used against the shortest way, and
+ *    when lost how far from the exit the walker was. Empty while playing.
+ */
+@Serializable
+data class MazeState(
+    val game: String,
+    val you: String,
+    val role: String,
+    val guide: String,
+    val walker: String,
+    val size: Int,
+    val walls: List<Int> = emptyList(),
+    val start: Int = -1,
+    val exit: Int = -1,
+    val position: Int = -1,
+    val trail: List<Int> = emptyList(),
+    val window: List<Int>,
+    val windowExit: Int = -1,
+    val movesUsed: Int,
+    val moveLimit: Int,
+    val hint: String = "",
+    val hintAt: Int = 0,
+    val hints: Int = 0,
+    val status: String,
+    val shortest: Int = 0,
+    val result: String = "",
+)
+
+/**
  * A Battleship game as ONE player sees it; each player gets their own version, so the opponent's
  * ships are never revealed until the game is over. Boards are 100 characters, row by row.
  *  - [phase]: "placing" (players are setting up), "playing" or "finished".
@@ -447,8 +500,8 @@ data class BattleState(
  *  - "system": a notice from the server (joins, leaves)
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
  *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes, [oware] for Oware,
- *              [mastermind] for Mastermind, [hex] for Hex, [memory] for Memory, [quarto] for Quarto or [brisca]
- *              for Brisca; all null means "no game any more".
+ *              [mastermind] for Mastermind, [hex] for Hex, [memory] for Memory, [quarto] for Quarto, [brisca]
+ *              for Brisca or [maze] for Maze Guide; all null means "no game any more".
  *              [version] grows with every change to the room's game. Two changes made at nearly the same time
  *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
  *              one you applied (an equal one, as sent on reconnect, is the same state again).
@@ -481,6 +534,7 @@ data class ServerMessage(
     val memory: MemoryState? = null,
     val quarto: QuartoState? = null,
     val brisca: BriscaState? = null,
+    val maze: MazeState? = null,
     val token: String? = null,
     val history: List<HistoryLine>? = null,
     val version: Long = 0,
