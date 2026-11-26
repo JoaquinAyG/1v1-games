@@ -432,6 +432,66 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun owareOverWebSocketPlaysAWholeGame() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+
+        client.webSocket("/ws?name=Ann&room=SEEDS") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=SEEDS") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                ann.say(ClientMessage(type = "startGame", game = "oware"))
+                val start = ann.next()
+                bob.next()
+                var state = start.oware!!
+                var version = start.version
+                assertEquals("Ann", state.southPlayer)
+                assertEquals("Bob", state.northPlayer)
+                assertEquals(List(12) { 4 }, state.pits)
+                assertEquals((0..5).toList(), state.legalMoves)
+
+                // North can't open, and south can't sow from north's pits. Only the sender hears about it.
+                bob.say(move(6))
+                assertEquals("Not your turn", bob.next().text)
+                ann.say(move(6))
+                assertEquals("Pick one of your own pits", ann.next().text)
+
+                // Each side always sows from its first legal pit until the game ends (the 100-move rule makes
+                // sure it does).
+                var plies = 0
+                while (state.status == "playing") {
+                    val pit = state.legalMoves.first()
+                    (if (state.turn == "S") ann else bob).say(move(pit))
+                    val annMessage = ann.next()
+                    val bobMessage = bob.next()
+                    assertEquals(annMessage.oware, bobMessage.oware)
+                    assertEquals(annMessage.version, bobMessage.version)
+                    assertTrue(annMessage.version > version)
+                    version = annMessage.version
+                    state = annMessage.oware!!
+                    assertEquals(pit, state.lastPit)
+                    assertEquals(Oware.TOTAL_SEEDS, state.pits.sum() + state.southCaptured + state.northCaptured)
+                    assertTrue(++plies < 2_000, "the game never ended")
+                }
+
+                assertTrue(state.status == "won" || state.status == "draw")
+                assertTrue(state.legalMoves.isEmpty())
+                if (state.status == "won") {
+                    val southWon = state.southCaptured > state.northCaptured
+                    assertEquals(if (southWon) "Ann" else "Bob", state.winner)
+                }
+
+                ann.say(move(0))
+                assertEquals("The game is over", ann.next().text)
+            }
+        }
+    }
+
+    @Test
     fun longChatMessagesAreCut() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }
