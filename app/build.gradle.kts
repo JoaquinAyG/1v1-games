@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
     // Reads google-services.json so the Firebase SDKs get this project's settings.
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 android {
@@ -47,6 +48,7 @@ dependencies {
 
     // Firebase: the BoM picks matching versions, so Firebase libraries are added below without one.
     implementation(platform("com.google.firebase:firebase-bom:35.2.0"))
+    implementation("com.google.firebase:firebase-crashlytics")
 
     implementation(platform("androidx.compose:compose-bom:2025.09.00"))
     implementation("androidx.compose.ui:ui")
