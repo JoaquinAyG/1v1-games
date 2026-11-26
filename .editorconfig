@@ -1,0 +1,5 @@
+# Keeps editors from saving sources in a legacy code page, which once turned the Battleship symbols into mojibake.
+root = true
+
+[*]
+charset = utf-8

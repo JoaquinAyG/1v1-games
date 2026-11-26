@@ -127,14 +127,14 @@ private fun PlacementEditor(battle: BattleState, onPlaceFleet: (List<List<Int>>)
                 selected = selected == i,
                 onClick = { selected = i },
                 label = { Text("${SHIP_NAMES[i]} (${FLEET[i]})") },
-                leadingIcon = if (i in placed) ({ Text("âœ“") }) else null,
+                leadingIcon = if (i in placed) ({ Text("\u2713") }) else null,
             )
         }
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { horizontal = !horizontal }) {
-            Text(if (horizontal) "Direction: â†’" else "Direction: â†“")
+            Text(if (horizontal) "Direction: \u2192" else "Direction: \u2193")
         }
         OutlinedButton(onClick = { placed = randomFleet(); problem = null }) { Text("Random") }
         OutlinedButton(onClick = { placed = emptyMap(); selected = 0; problem = null }) { Text("Reset") }
@@ -230,9 +230,9 @@ private fun BoardLabel(label: Any, modifier: Modifier) {
 private fun SeaCell(mark: Char, enabled: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val (color, label) = when (mark) {
         'S' -> ShipColor to ""
-        'H' -> HitColor to "âœ•"
-        'X' -> SunkColor to "âœ•"
-        'M' -> MissColor to "â€¢"
+        'H' -> HitColor to "\u2715"
+        'X' -> SunkColor to "\u2715"
+        'M' -> MissColor to "\u2022"
         else -> WaterColor to ""
     }
     Box(
