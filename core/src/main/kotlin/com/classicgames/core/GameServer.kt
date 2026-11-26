@@ -113,7 +113,7 @@ fun Application.module(graceMillis: Long = DEFAULT_GRACE_MILLIS) {
                             hub.say(room, ServerMessage("chat", name, capChat(msg.text)), except = name)
                         }
                         "startGame" -> respond(hub.startGame(room, msg.game.orEmpty(), name))
-                        "move", "place", "secret" -> respond(hub.act(room, name, msg))
+                        "move", "place", "secret", "swap" -> respond(hub.act(room, name, msg))
                         "leave" -> {
                             leftOnPurpose = true
                             break

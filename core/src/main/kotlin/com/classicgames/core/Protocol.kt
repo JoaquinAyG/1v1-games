@@ -14,14 +14,16 @@ data class ShipPlacement(val cells: List<Int>)
  *  - "leave":     goodbye for good: the seat is freed at once (without it, a dropped connection keeps the seat
  *                 for a while so the player can come back)
  *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello", "checkers", "dotsandboxes",
- *                 "oware" or "mastermind")
+ *                 "oware", "mastermind" or "hex")
  *  - "move":      [cell] (tic-tac-toe: 0..8 row by row; battleship: 0..99 row by row, the cell to fire at;
  *                 connect four: the column 0..6 to drop a disc into; othello: 0..63 row by row;
- *                 dots and boxes: the line to draw, see below; oware: the pit to sow from, see below),
+ *                 dots and boxes: the line to draw, see below; oware: the pit to sow from, see below;
+ *                 hex: the cell to put a stone on, see below),
  *                 or [from] and [to] (checkers: 0..63 row by row, one step or one jump),
  *                 or [code] (mastermind: your guess at the opponent's code)
  *  - "place":     [ships] (battleship: your whole fleet, once)
  *  - "secret":    [code] (mastermind: the code your opponent has to crack, once)
+ *  - "swap":      nothing else (hex: the second player takes over the first stone instead of placing one, see below)
  * A frame that is not JSON at all is treated as a chat message with that text.
  *
  * Dots and Boxes lines, on a board of n x n boxes ([DotsState.size], 5 by default) with dot rows and dot
@@ -46,6 +48,21 @@ data class ShipPlacement(val cells: List<Int>)
  *
  * A Mastermind code is a list of [MastermindState.pegs] colours (4 by default), from left to right, each colour a
  * number 0 until [MastermindState.colors] (6 by default). Repeats are allowed.
+ *
+ * Hex cells, on a board of n x n ([HexState.size], 9 by default), are numbered row by row from the top-left:
+ * cell = row * n + column. Every row sits half a cell further right than the one above it, so the board is a rhombus
+ * and cell (row, column) touches (row - 1, column), (row - 1, column + 1), (row, column - 1), (row, column + 1),
+ * (row + 1, column - 1) and (row + 1, column). On a 3 x 3 board:
+ * ```
+ *    0   1   2
+ *      3   4   5
+ *        6   7   8
+ * ```
+ * Red (the first player) joins the top row to the bottom row, blue joins the left column to the right column.
+ * Swap: on blue's first turn ([HexState.canSwap]), blue may send "swap" instead of a move. Red's only stone is then
+ * removed and a blue stone is put on its mirror image across the long diagonal, from the top-left corner to the
+ * bottom-right one: cell (row, column) becomes (column, row). The mirror turns top-bottom into left-right, so blue
+ * gets exactly the position red had made, and red moves next. Nobody changes colour or sides.
  */
 @Serializable
 data class ClientMessage(
@@ -248,6 +265,30 @@ data class MastermindState(
 )
 
 /**
+ * Snapshot of a Hex game, sent to both players after every change.
+ * [size] is the number of cells per side (n). [board] has n * n characters, one per cell numbered as described on
+ * [ClientMessage]: '.' empty, 'R' red (joins top and bottom) or 'B' blue (joins left and right).
+ * [turn] is "R" or "B". [status] is "playing" or "won" (Hex has no draws). [lastMove] is the cell played last (-1
+ * before the first move; after a swap, blue's mirrored stone). [canSwap] is true while blue may swap, and [swapped]
+ * once blue has. [winningPath] is the winner's chain of cells from one of their sides to the other.
+ */
+@Serializable
+data class HexState(
+    val game: String,
+    val size: Int,
+    val board: String,
+    val redPlayer: String,
+    val bluePlayer: String,
+    val turn: String,
+    val status: String,
+    val winner: String? = null,
+    val lastMove: Int = -1,
+    val canSwap: Boolean = false,
+    val swapped: Boolean = false,
+    val winningPath: List<Int> = emptyList(),
+)
+
+/**
  * A Battleship game as ONE player sees it; each player gets their own version, so the opponent's
  * ships are never revealed until the game is over. Boards are 100 characters, row by row.
  *  - [phase]: "placing" (players are setting up), "playing" or "finished".
@@ -278,8 +319,8 @@ data class BattleState(
  *  - "chat":   a player's message ([from], [text])
  *  - "system": a notice from the server (joins, leaves)
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
- *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes, [oware] for Oware or
- *              [mastermind] for Mastermind; all null means "no game any more".
+ *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes, [oware] for Oware,
+ *              [mastermind] for Mastermind or [hex] for Hex; all null means "no game any more".
  *              [version] grows with every change to the room's game. Two changes made at nearly the same time
  *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
  *              one you applied (an equal one, as sent on reconnect, is the same state again).
@@ -308,6 +349,7 @@ data class ServerMessage(
     val dots: DotsState? = null,
     val oware: OwareState? = null,
     val mastermind: MastermindState? = null,
+    val hex: HexState? = null,
     val token: String? = null,
     val history: List<HistoryLine>? = null,
     val version: Long = 0,
