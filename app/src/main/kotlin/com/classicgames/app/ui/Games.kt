@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
@@ -38,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -61,6 +65,7 @@ val GAMES = listOf(
     GameEntry(id = "hex", title = "Hex", icon = { HexIcon() }),
     GameEntry(id = "memory", title = "Memory", icon = { MemoryIcon() }),
     GameEntry(id = "quarto", title = "Quarto", icon = { QuartoIcon() }),
+    GameEntry(id = "brisca", title = "Brisca", icon = { BriscaIcon() }),
 )
 
 /** Lays the games out in rows of [columns] tiles. Gaps in the last row stay empty so tiles keep their size. */
@@ -421,6 +426,25 @@ fun QuartoIcon(modifier: Modifier = Modifier) {
                 cornerRadius = CornerRadius(0.18f * cell, 0.18f * cell),
             )
             drawQuartoPiece(piece, Offset(cellLeft + cell / 2, cellTop + cell / 2), cell, QuartoCell)
+        }
+    }
+}
+
+/** A fan of four Spanish cards, one of each suit, built from the same pieces as the real ones. */
+@Composable
+fun BriscaIcon(modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.Center) {
+        // As de Oros, 3 de Copas, 7 de Espadas and Rey de Bastos, from left to right, spread enough that each suit
+        // still shows under the next card.
+        for ((i, card) in listOf(0, 12, 26, 39).withIndex()) {
+            val spread = i - 1.5f
+            SpanishCard(
+                card,
+                Modifier
+                    .offset(x = (spread * 20).dp, y = (abs(spread) * 4).dp)
+                    .rotate(spread * 8f)
+                    .width(30.dp),
+            )
         }
     }
 }

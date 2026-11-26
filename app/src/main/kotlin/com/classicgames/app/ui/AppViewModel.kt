@@ -16,6 +16,7 @@ import com.classicgames.app.data.SettingsStore
 import com.classicgames.app.server.PhoneServer
 import com.classicgames.app.server.PhoneServerState
 import com.classicgames.core.BattleState
+import com.classicgames.core.BriscaState
 import com.classicgames.core.CheckersState
 import com.classicgames.core.ClientMessage
 import com.classicgames.core.ConnectState
@@ -84,6 +85,8 @@ data class RoomUi(
     val memory: MemoryState? = null,
     /** The Quarto game running in this room, if any. */
     val quarto: QuartoState? = null,
+    /** The Brisca game running in this room, if any (as this player sees it). */
+    val brisca: BriscaState? = null,
     /** The game whose tile was tapped in the lobby to host this room; the room offers it first. */
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
@@ -308,11 +311,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             hex = msg.hex,
             memory = msg.memory,
             quarto = msg.quarto,
+            brisca = msg.brisca,
             notice = null,
             // No game at all means it was cancelled (the other player left): say so in the chat.
             lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
                 msg.othello == null && msg.checkers == null && msg.dots == null && msg.oware == null &&
-                msg.mastermind == null && msg.hex == null && msg.memory == null && msg.quarto == null
+                msg.mastermind == null && msg.hex == null && msg.memory == null && msg.quarto == null &&
+                msg.brisca == null
             ) {
                 room.lines + ChatLine("server", msg.text, system = true)
             } else {
@@ -397,6 +402,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun givePiece(piece: Int) {
         if (_room.value?.state != ConnectionState.Connected) return
         active?.outgoing?.trySend(ClientMessage(type = "move", piece = piece))
+    }
+
+    /** Brisca: plays [card] (0..39, suit * 10 + rank, see BriscaState) from your hand. */
+    fun playCard(card: Int) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", card = card))
+    }
+
+    /** Brisca: swaps the 7 of trumps in your hand for the face-up trump, before playing your card. */
+    fun swapSeven() {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "swap7"))
     }
 
     /** Hex: instead of placing a stone on your first turn as the second player, take over the first stone. */
