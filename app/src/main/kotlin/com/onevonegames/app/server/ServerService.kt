@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
@@ -137,7 +136,7 @@ class ServerService : Service() {
     @Suppress("DEPRECATION")
     private fun holdWifiAwake() {
         runCatching {
-            val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
             val mode = if (Build.VERSION.SDK_INT >= 29) {
                 WifiManager.WIFI_MODE_FULL_LOW_LATENCY
             } else {
@@ -178,7 +177,7 @@ class ServerService : Service() {
     }
 
     override fun onDestroy() {
-        // From here on the start coroutine sets nothing up any more. If the engine is still starting, server is null
+        // From here on the start coroutine sets nothing up anymore. If the engine is still starting, server is null
         // below and the coroutine stops the engine itself once start() returns.
         synchronized(lock) { destroyed = true }
         networkCallback?.let { runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) } }

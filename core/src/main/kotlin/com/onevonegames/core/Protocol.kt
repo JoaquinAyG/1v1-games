@@ -569,7 +569,7 @@ data class BattleState(
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
  *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes, [oware] for Oware,
  *              [mastermind] for Mastermind, [hex] for Hex, [memory] for Memory, [quarto] for Quarto, [brisca]
- *              for Brisca, [maze] for Maze Guide or [hanabi] for Hanabi; all null means "no game any more".
+ *              for Brisca, [maze] for Maze Guide or [hanabi] for Hanabi; all null means "no game anymore".
  *              [version] grows with every change to the room's game. Two changes made at nearly the same time
  *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
  *              one you applied (an equal one, as sent on reconnect, is the same state again).

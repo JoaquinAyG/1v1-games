@@ -318,7 +318,7 @@ class HanabiTest {
         assertTrue(p.yourTurn)
         assertEquals(5, d.yourHand.size)
 
-        // The partner first: no card to draw any more.
+        // The partner first: no card to draw anymore.
         assertNull(g.play(partner, 0))
         d = g.toState(drawer)
         p = g.toState(partner)
