@@ -18,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.onevonegames.app.MainActivity
 import com.onevonegames.app.R
+import com.onevonegames.core.awaitFreePort
 import com.onevonegames.core.createGameServer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,7 +74,9 @@ class ServerService : Service() {
         PhoneServer.setState(PhoneServerState.Starting)
         scope.launch {
             try {
-                val started = createGameServer(port = PhoneServer.PORT, host = "0.0.0.0").start(wait = false)
+                // start(wait = false) can't report a busy port: it would crash the app instead.
+                if (!awaitFreePort(PhoneServer.PORT)) throw BindException()
+                val started =createGameServer(port = PhoneServer.PORT, host = "0.0.0.0").start(wait = false)
                 val alive = synchronized(lock) {
                     if (!destroyed) {
                         server = started

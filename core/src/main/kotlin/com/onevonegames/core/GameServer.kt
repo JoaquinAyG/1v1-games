@@ -17,7 +17,11 @@ import io.ktor.websocket.send
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.ServerSocket
 import kotlin.time.Duration.Companion.seconds
 
 /** Longest chat message passed on to the room; anything longer is cut. */
@@ -25,6 +29,27 @@ const val MAX_CHAT_LENGTH = 500
 
 /** Largest frame a client may send. Real messages are far smaller; a bigger frame closes the connection. */
 private const val MAX_FRAME_BYTES = 64 * 1024L
+
+/**
+ * Whether [port] can be listened on, trying for up to [waitMillis] so that a server which is still shutting down
+ * has time to let go of it. Check this before `start(wait = false)`: the engine binds on a background coroutine,
+ * so a busy port is not thrown to the caller there and would take the whole process down.
+ */
+suspend fun awaitFreePort(port: Int, waitMillis: Long = 3_000): Boolean {
+    var waited = 0L
+    while (true) {
+        try {
+            ServerSocket().use { it.bind(InetSocketAddress("0.0.0.0", port)) }
+            return true
+        } catch (_: IOException) {
+            if (waited >= waitMillis) return false
+            delay(PORT_RETRY_MILLIS)
+            waited += PORT_RETRY_MILLIS
+        }
+    }
+}
+
+private const val PORT_RETRY_MILLIS = 100L
 
 /**
  * Creates (but does not start) the game server. Call `.start(wait = true)` on a PC, or `.start(wait = false)`
