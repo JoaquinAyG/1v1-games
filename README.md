@@ -19,6 +19,7 @@ the client. The server can run on a **PC**, or **inside one of the phones**, so 
 | Quarto | 4x4, 16 pieces (tall/short, dark/light, square/round, hollow/solid): you choose the piece your opponent places; four in a line sharing a trait wins. |
 | Brisca | The Spanish card game for two, 40-card deck: no need to follow suit, trumps win, 61 of the 120 points win; swap the 7 of trumps for the face-up card. |
 | Maze Guide | Cooperative: a new 8x8 maze every game. The guide sees all of it and sends hints; the walker only sees the 3x3 cells around them and must reach the exit within 1.5 times the shortest way. |
+| Hanabi | Cooperative: build five fireworks from 1 to 5 together. You see your partner's cards but not your own; hint, discard or play, with 8 hint tokens and 3 lives shared, for a score out of 25. |
 
 If a phone loses its connection (Wi-Fi drops, the app is killed, ...), its seat and the game are kept for 90
 seconds and the app takes them back by itself. See [Reconnection](#reconnection).
@@ -132,21 +133,25 @@ server sends back, so neither app can cheat or get out of sync.
 - `ws://<server>:8080/ws?name=<you>&room=<code>` joins a room (max 2 players, unique names per room). Adding
   `&token=<seat token>` takes an existing seat back (see Reconnection).
 - Client messages are JSON with a `type`: `chat`, `startGame` (a `game`: `tictactoe`, `battleship`, `connectfour`,
-  `othello`, `checkers`, `dotsandboxes`, `oware`, `mastermind`, `hex`, `memory`, `quarto`, `brisca` or `maze`),
-  `move` (a `cell`, which for Dots and Boxes is a line number, for Oware a pit number and for Memory a card number,
-  `from` and `to` for checkers, a `code` for a Mastermind guess, a `piece` for the Quarto piece you give your
-  opponent, a `card` for the Brisca card you play, or a `direction`, `up`, `down`, `left` or `right`, for the Maze
-  Guide walker's step), `place` (Battleship fleet), `secret` (your Mastermind `code`), `swap` (Hex swap rule), `swap7`
-  (Brisca: swap the 7 of trumps for the face-up card), `hint` (Maze Guide: the guide sends a `direction`), `leave`.
+  `othello`, `checkers`, `dotsandboxes`, `oware`, `mastermind`, `hex`, `memory`, `quarto`, `brisca`, `maze` or
+  `hanabi`), `move` (a `cell`, which for Dots and Boxes is a line number, for Oware a pit number and for Memory a card
+  number, `from` and `to` for checkers, a `code` for a Mastermind guess, a `piece` for the Quarto piece you give your
+  opponent, a `card` for the Brisca card you play, a `direction`, `up`, `down`, `left` or `right`, for the Maze Guide
+  walker's step, or a Hanabi `action`: `hint` with a `color` or a `number`, or `discard` or `play` with the `card` at
+  that position in your hand), `place` (Battleship fleet), `secret` (your Mastermind `code`), `swap` (Hex swap rule),
+  `swap7` (Brisca: swap the 7 of trumps for the face-up card), `hint` (Maze Guide: the guide sends a `direction`),
+  `leave`.
 - The server replies with `chat`, `system`, `error` (only to the sender) and `game` messages. Each game has its own
-  state object; Battleship, Mastermind, Brisca and Maze Guide send every player a different view so ships, codes,
-  hands and the maze stay hidden, and Memory never sends the face of a card that is face down. Every `game` message
-  has a `version` that grows with each change: two updates can arrive out of order, so ignore one older than the last
-  you applied. Right after you connect it also sends `session` (your seat token), `history` (recent chat) and, if a
-  game is running, its current state; `presence` tells you when the other player goes offline or comes back.
+  state object; Battleship, Mastermind, Brisca, Maze Guide and Hanabi send every player a different view so ships,
+  codes, hands and the maze stay hidden (in Hanabi you get your partner's cards and only what hints told you about
+  your own), and Memory never sends the face of a card that is face down. Every `game` message has a `version` that
+  grows with each change: two updates can arrive out of order, so ignore one older than the last you applied. Right
+  after you connect it also sends `session` (your seat token), `history` (recent chat) and, if a game is running, its
+  current state; `presence` tells you when the other player goes offline or comes back.
 - Games can be competitive or cooperative. A competitive game ends with a `winner` or a draw; a cooperative one (Maze
-  Guide) has no winner: its `status` is `won` or `lost` for both players, with a `result` sentence. Either way,
-  leaving in the middle cancels the game for the other player.
+  Guide, Hanabi) has no winner: its `status` is the same for both players (`won` or `lost`, and for Hanabi also
+  `finished` with a `score` out of 25), with a `result` sentence. Either way, leaving in the middle cancels the game
+  for the other player.
 
 The full message definitions are documented in `core/src/main/kotlin/com/classicgames/core/Protocol.kt`, which the
 server and the app both use.
@@ -156,7 +161,7 @@ server and the app both use.
 | What | Where (under `core/src/main/kotlin/com/classicgames/core`, `app/src/main/kotlin/com/classicgames/app`) |
 |---|---|
 | Rooms, seats, grace period, history | `core`: `Hub.kt`, `GameServer.kt` |
-| Game rules | `core`: `TicTacToe.kt`, `Battleship.kt`, `ConnectFour.kt`, `Othello.kt`, `Checkers.kt`, `DotsAndBoxes.kt`, `Oware.kt`, `Mastermind.kt`, `Hex.kt`, `Memory.kt`, `Quarto.kt`, `Brisca.kt`, `Maze.kt` |
+| Game rules | `core`: `TicTacToe.kt`, `Battleship.kt`, `ConnectFour.kt`, `Othello.kt`, `Checkers.kt`, `DotsAndBoxes.kt`, `Oware.kt`, `Mastermind.kt`, `Hex.kt`, `Memory.kt`, `Quarto.kt`, `Brisca.kt`, `Maze.kt`, `Hanabi.kt` |
 | Shared game interface and protocol | `core`: `Game.kt`, `Protocol.kt` |
 | Connection, reconnecting, saved seat | `app`: `data/ChatClient.kt`, `ui/AppViewModel.kt`, `data/SettingsStore.kt` |
 | The server inside the phone | `app`: `server/ServerService.kt`, `server/PhoneServer.kt` |
