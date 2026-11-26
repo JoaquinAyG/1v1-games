@@ -66,6 +66,7 @@ val GAMES = listOf(
     GameEntry(id = "memory", title = "Memory", icon = { MemoryIcon() }),
     GameEntry(id = "quarto", title = "Quarto", icon = { QuartoIcon() }),
     GameEntry(id = "brisca", title = "Brisca", icon = { BriscaIcon() }),
+    GameEntry(id = "maze", title = "Maze Guide", icon = { MazeIcon() }),
 )
 
 /** Lays the games out in rows of [columns] tiles. Gaps in the last row stay empty so tiles keep their size. */
@@ -446,6 +447,16 @@ fun BriscaIcon(modifier: Modifier = Modifier) {
                     .width(30.dp),
             )
         }
+    }
+}
+
+/** A small maze drawn like the real one: the walker partway along their trail, and the exit in the far corner. */
+@Composable
+fun MazeIcon(modifier: Modifier = Modifier) {
+    // A perfect 4 x 4 maze, one wall mask per cell (1 up, 2 right, 4 down, 8 left).
+    val walls = listOf(13, 5, 1, 3, 9, 5, 6, 14, 10, 9, 5, 3, 12, 4, 7, 14)
+    Canvas(modifier = modifier.fillMaxSize().padding(16.dp)) {
+        drawMaze(cells = 4, walls = walls, exit = 15, walker = 5, trail = listOf(0, 1, 2, 6, 5))
     }
 }
 

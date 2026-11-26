@@ -24,6 +24,7 @@ import com.classicgames.core.DotsState
 import com.classicgames.core.GameState
 import com.classicgames.core.HexState
 import com.classicgames.core.MastermindState
+import com.classicgames.core.MazeState
 import com.classicgames.core.MemoryState
 import com.classicgames.core.OthelloState
 import com.classicgames.core.OwareState
@@ -87,6 +88,8 @@ data class RoomUi(
     val quarto: QuartoState? = null,
     /** The Brisca game running in this room, if any (as this player sees it). */
     val brisca: BriscaState? = null,
+    /** The Maze Guide game running in this room, if any (as this player sees it). */
+    val maze: MazeState? = null,
     /** The game whose tile was tapped in the lobby to host this room; the room offers it first. */
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
@@ -312,12 +315,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             memory = msg.memory,
             quarto = msg.quarto,
             brisca = msg.brisca,
+            maze = msg.maze,
             notice = null,
             // No game at all means it was cancelled (the other player left): say so in the chat.
             lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
                 msg.othello == null && msg.checkers == null && msg.dots == null && msg.oware == null &&
                 msg.mastermind == null && msg.hex == null && msg.memory == null && msg.quarto == null &&
-                msg.brisca == null
+                msg.brisca == null && msg.maze == null
             ) {
                 room.lines + ChatLine("server", msg.text, system = true)
             } else {
@@ -414,6 +418,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun swapSeven() {
         if (_room.value?.state != ConnectionState.Connected) return
         active?.outgoing?.trySend(ClientMessage(type = "swap7"))
+    }
+
+    /** Maze Guide, as the walker: steps one cell "up", "down", "left" or "right". */
+    fun moveWalker(direction: String) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", direction = direction))
+    }
+
+    /** Maze Guide, as the guide: tells the walker to go "up", "down", "left" or "right". */
+    fun sendHint(direction: String) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "hint", direction = direction))
     }
 
     /** Hex: instead of placing a stone on your first turn as the second player, take over the first stone. */

@@ -82,6 +82,8 @@ private fun AppRoot(viewModel: AppViewModel, onRequestNotifications: () -> Unit)
             onGivePiece = viewModel::givePiece,
             onPlayCard = viewModel::playCard,
             onSwapSeven = viewModel::swapSeven,
+            onMoveWalker = viewModel::moveWalker,
+            onHint = viewModel::sendHint,
             onLeave = viewModel::leaveRoom,
         )
     }
