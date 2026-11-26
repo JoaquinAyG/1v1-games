@@ -492,6 +492,101 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun mastermindOverWebSocketHidesEachCodeUntilTheEnd() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+        val annCode = listOf(0, 0, 1, 1)
+        val bobCode = listOf(5, 4, 3, 2)
+        val wrong = listOf(1, 2, 3, 4)
+        fun secret(code: List<Int>) = ClientMessage(type = "secret", code = code)
+        fun guess(code: List<Int>) = ClientMessage(type = "move", code = code)
+
+        client.webSocket("/ws?name=Ann&room=CODES") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=CODES") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                var version = 0L
+
+                /** Reads the update both players get for one change and checks it is a newer version. */
+                suspend fun update(): Pair<MastermindState, MastermindState> {
+                    val a = ann.next()
+                    val b = bob.next()
+                    assertEquals(a.version, b.version)
+                    assertTrue(a.version > version)
+                    version = a.version
+                    // Neither player is ever sent the other's code before the game is over.
+                    if (a.mastermind!!.phase != "finished") {
+                        assertTrue(a.mastermind!!.opponentSecret.isEmpty())
+                        assertTrue(b.mastermind!!.opponentSecret.isEmpty())
+                        val bobJson = protocolJson.encodeToString(ServerMessage.serializer(), b)
+                        assertTrue("[0,0,1,1]" !in bobJson, bobJson)
+                    }
+                    return a.mastermind!! to b.mastermind!!
+                }
+
+                ann.say(ClientMessage(type = "startGame", game = "mastermind"))
+                var (a, b) = update()
+                assertEquals("secret", a.phase)
+                assertEquals("Ann", a.firstPlayer)
+                assertEquals("Bob", a.opponent)
+                assertEquals("Ann", b.opponent)
+
+                // Bad codes and early guesses are rejected, only for the sender.
+                bob.say(guess(wrong))
+                assertEquals("Set your code first", bob.next().text)
+                ann.say(secret(listOf(0, 1)))
+                assertEquals("A code is 4 pegs, each one of the 6 colours", ann.next().text)
+
+                ann.say(secret(annCode))
+                update().let { (x, y) -> a = x; b = y }
+                assertEquals(annCode, a.yourSecret)
+                assertTrue(b.opponentReady)
+                assertTrue(b.yourSecret.isEmpty())
+
+                bob.say(secret(bobCode))
+                update().let { (x, y) -> a = x; b = y }
+                assertEquals("guessing", a.phase)
+                assertTrue(a.yourTurn)
+                assertEquals(bobCode, b.yourSecret)
+
+                bob.say(guess(wrong))
+                assertEquals("Not your turn", bob.next().text)
+
+                // Round 1: both miss. 1 2 3 4 against 5 4 3 2 is one black (the 3) and two white (the 2 and 4).
+                ann.say(guess(wrong))
+                update().let { (x, y) -> a = x; b = y }
+                assertEquals(listOf(MastermindGuess(wrong, 1, 2)), a.yourGuesses)
+                assertEquals(a.yourGuesses, b.opponentGuesses)
+                assertTrue(b.yourTurn)
+                bob.say(guess(wrong))
+                update().let { (x, y) -> a = x; b = y }
+                assertEquals(listOf(MastermindGuess(wrong, 0, 1)), b.yourGuesses)
+
+                // Round 2: Ann cracks it, Bob still gets his guess, misses, and Ann wins.
+                ann.say(guess(bobCode))
+                update().let { (x, y) -> a = x; b = y }
+                assertEquals("guessing", a.phase)
+                assertTrue(b.yourTurn)
+                bob.say(guess(listOf(0, 0, 1, 2)))
+                update().let { (x, y) -> a = x; b = y }
+                assertEquals("finished", a.phase)
+                assertEquals("Ann", a.winner)
+                assertEquals("Ann", b.winner)
+                assertEquals(bobCode, a.opponentSecret)
+                assertEquals(annCode, b.opponentSecret)
+                assertEquals(MastermindGuess(listOf(0, 0, 1, 2), 3, 0), b.yourGuesses.last())
+
+                ann.say(guess(wrong))
+                assertEquals("The game is over", ann.next().text)
+            }
+        }
+    }
+
+    @Test
     fun longChatMessagesAreCut() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }
