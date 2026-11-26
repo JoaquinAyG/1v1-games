@@ -80,6 +80,8 @@ private fun AppRoot(viewModel: AppViewModel, onRequestNotifications: () -> Unit)
             onGuessCode = viewModel::guessCode,
             onSwap = viewModel::swapHex,
             onGivePiece = viewModel::givePiece,
+            onPlayCard = viewModel::playCard,
+            onSwapSeven = viewModel::swapSeven,
             onLeave = viewModel::leaveRoom,
         )
     }
