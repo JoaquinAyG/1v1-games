@@ -14,12 +14,13 @@ data class ShipPlacement(val cells: List<Int>)
  *  - "leave":     goodbye for good: the seat is freed at once (without it, a dropped connection keeps the seat
  *                 for a while so the player can come back)
  *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello", "checkers", "dotsandboxes",
- *                 "oware", "mastermind", "hex" or "memory")
+ *                 "oware", "mastermind", "hex", "memory" or "quarto")
  *  - "move":      [cell] (tic-tac-toe: 0..8 row by row; battleship: 0..99 row by row, the cell to fire at;
  *                 connect four: the column 0..6 to drop a disc into; othello: 0..63 row by row;
  *                 dots and boxes: the line to draw, see below; oware: the pit to sow from, see below;
  *                 hex: the cell to put a stone on, see below; memory: the card to flip, 0 until columns * rows
- *                 row by row),
+ *                 row by row; quarto: the cell 0..15, row by row, to put the piece you were given on),
+ *                 or [piece] (quarto: the piece 0..15 from the pool to give your opponent, see below),
  *                 or [from] and [to] (checkers: 0..63 row by row, one step or one jump),
  *                 or [code] (mastermind: your guess at the opponent's code)
  *  - "place":     [ships] (battleship: your whole fleet, once)
@@ -64,6 +65,12 @@ data class ShipPlacement(val cells: List<Int>)
  * removed and a blue stone is put on its mirror image across the long diagonal, from the top-left corner to the
  * bottom-right one: cell (row, column) becomes (column, row). The mirror turns top-bottom into left-right, so blue
  * gets exactly the position red had made, and red moves next. Nobody changes colour or sides.
+ *
+ * Quarto pieces are numbered 0..15 with one bit per trait, as described on [QuartoState]. A turn is two moves, each
+ * one its own "move" message: first [cell] to place the piece you were handed (in phase "place"), then [piece] to hand
+ * your opponent the piece they must place next (in phase "choose"). The game opens with the first player choosing. A
+ * move that does not fit the phase, or that sends both fields or neither, is rejected; nothing is given after the
+ * winning piece or the 16th one.
  */
 @Serializable
 data class ClientMessage(
@@ -75,6 +82,7 @@ data class ClientMessage(
     val from: Int? = null,
     val to: Int? = null,
     val code: List<Int>? = null,
+    val piece: Int? = null,
 )
 
 /**
@@ -320,6 +328,43 @@ data class MemoryState(
 )
 
 /**
+ * Snapshot of a Quarto game, sent to both players after every change. Cells are numbered row by row from the top-left
+ * (cell = row * 4 + column). Pieces are numbered 0..15, one bit per trait (bit set / bit clear):
+ *  - 1: tall / short
+ *  - 2: dark / light
+ *  - 4: square / round
+ *  - 8: hollow (a hole in the top) / solid
+ * so piece 0 is short, light, round and solid, piece 15 tall, dark, square and hollow, and piece 5 (1 + 4) tall, light,
+ * square and solid.
+ * [board] has 16 entries, one per cell: the piece on it, or -1 while it is empty. [pool] lists the pieces nobody has
+ * placed or been handed yet, smallest first. [piece] is the piece handed to the player who must place it (-1 while a
+ * piece is being chosen, and at the end).
+ * [turn] is "1" (the first player) or "2": the player who must act now. [phase] says what they must do: "choose" a
+ * piece from the pool for their opponent, "place" [piece] on an empty cell, or nothing because the game is "finished".
+ * [status] is "playing", "won" or "draw". [lastCell] is the cell the last piece went on (-1 before the first).
+ * [line] holds the 4 cells of the winning line, and [sharedTraits] what all its pieces have in common, as the words
+ * "tall", "short", "dark", "light", "square", "round", "hollow" or "solid", in that trait order. If the winning piece
+ * completed more than one line, [line] is the first of the rows (top to bottom), the columns (left to right), the
+ * diagonal from the top-left corner and the one from the top-right corner.
+ */
+@Serializable
+data class QuartoState(
+    val game: String,
+    val board: List<Int>,
+    val pool: List<Int>,
+    val piece: Int = -1,
+    val firstPlayer: String,
+    val secondPlayer: String,
+    val turn: String,
+    val phase: String,
+    val status: String,
+    val winner: String? = null,
+    val lastCell: Int = -1,
+    val line: List<Int> = emptyList(),
+    val sharedTraits: List<String> = emptyList(),
+)
+
+/**
  * A Battleship game as ONE player sees it; each player gets their own version, so the opponent's
  * ships are never revealed until the game is over. Boards are 100 characters, row by row.
  *  - [phase]: "placing" (players are setting up), "playing" or "finished".
@@ -351,7 +396,8 @@ data class BattleState(
  *  - "system": a notice from the server (joins, leaves)
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
  *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes, [oware] for Oware,
- *              [mastermind] for Mastermind, [hex] for Hex or [memory] for Memory; all null means "no game any more".
+ *              [mastermind] for Mastermind, [hex] for Hex, [memory] for Memory or [quarto] for Quarto; all null
+ *              means "no game any more".
  *              [version] grows with every change to the room's game. Two changes made at nearly the same time
  *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
  *              one you applied (an equal one, as sent on reconnect, is the same state again).
@@ -382,6 +428,7 @@ data class ServerMessage(
     val mastermind: MastermindState? = null,
     val hex: HexState? = null,
     val memory: MemoryState? = null,
+    val quarto: QuartoState? = null,
     val token: String? = null,
     val history: List<HistoryLine>? = null,
     val version: Long = 0,

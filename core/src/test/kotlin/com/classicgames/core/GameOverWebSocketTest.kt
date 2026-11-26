@@ -736,6 +736,94 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun quartoOverWebSocketPlaysADrawThenARematchToAWin() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+        fun give(piece: Int) = ClientMessage(type = "move", piece = piece)
+
+        client.webSocket("/ws?name=Ann&room=QUARTO") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=QUARTO") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                var version = 0L
+
+                /** Reads the update both players get for one change: the same state, with a newer version. */
+                suspend fun update(): QuartoState {
+                    val a = ann.next()
+                    val b = bob.next()
+                    assertEquals(a.quarto, b.quarto)
+                    assertEquals(a.version, b.version)
+                    assertTrue(a.version > version)
+                    version = a.version
+                    return a.quarto!!
+                }
+
+                ann.say(ClientMessage(type = "startGame", game = "quarto"))
+                var state = update()
+                assertEquals("Ann", state.firstPlayer)
+                assertEquals("choose", state.phase)
+
+                // Out of turn, out of phase and malformed moves only reach the sender.
+                bob.say(give(0))
+                assertEquals("Not your turn", bob.next().text)
+                ann.say(move(0))
+                assertEquals("Choose a piece for Bob first", ann.next().text)
+                ann.say(ClientMessage(type = "move", cell = 0, piece = 0))
+                assertEquals("Send a cell to place your piece, or a piece to give", ann.next().text)
+
+                // Each piece of a full board without a line goes on its own cell, in order: nobody ever wins.
+                val drawn = listOf(12, 8, 2, 7, 5, 0, 10, 4, 11, 14, 9, 3, 1, 13, 6, 15)
+                for ((cell, piece) in drawn.withIndex()) {
+                    val chooser = if (state.turn == "1") ann else bob
+                    chooser.say(give(piece))
+                    state = update()
+                    assertEquals(piece, state.piece)
+                    assertEquals("place", state.phase)
+                    if (cell == 0) {
+                        bob.say(give(1))
+                        assertEquals("Place the piece you were given first", bob.next().text)
+                    }
+                    (if (state.turn == "1") ann else bob).say(move(cell))
+                    state = update()
+                    assertEquals(-1, state.piece)
+                }
+                assertEquals(drawn, state.board)
+                assertEquals("draw", state.status)
+                assertEquals("finished", state.phase)
+                assertTrue(state.pool.isEmpty())
+                ann.say(give(0))
+                assertEquals("The game is over", ann.next().text)
+
+                // Rematch: Bob chooses first now. Pieces 0..3 go on the top row in order; they are all round and
+                // solid, and Bob, who places the 2nd and the 4th piece, wins.
+                bob.say(ClientMessage(type = "startGame", game = "quarto"))
+                state = update()
+                assertEquals("Bob", state.firstPlayer)
+                assertEquals("Ann", state.secondPlayer)
+                assertEquals("1", state.turn)
+                for (piece in 0 until 4) {
+                    (if (state.turn == "1") bob else ann).say(give(piece))
+                    state = update()
+                    (if (state.turn == "1") bob else ann).say(move(piece))
+                    state = update()
+                }
+                assertEquals("won", state.status)
+                assertEquals("Bob", state.winner)
+                assertEquals(listOf(0, 1, 2, 3), state.line)
+                assertEquals(listOf("round", "solid"), state.sharedTraits)
+                assertEquals(12, state.pool.size)
+
+                ann.say(move(4))
+                assertEquals("The game is over", ann.next().text)
+            }
+        }
+    }
+
+    @Test
     fun longChatMessagesAreCut() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }

@@ -16,6 +16,7 @@ the phones**, so you don't even need a computer.
 | Mastermind | A duel: each player hides a code of 4 pegs in 6 colours and cracks the other's, 10 guesses each. |
 | Hex | 7x7 rhombus: join your two sides of the board with a chain of stones; the second player may swap. |
 | Memory | 6x4 cards, 12 pairs: flip two cards; a pair is yours and you flip again, most pairs wins. |
+| Quarto | 4x4, 16 pieces (tall/short, dark/light, square/round, hollow/solid): you choose the piece your opponent places; four in a line sharing a trait wins. |
 
 If a phone loses its connection (Wi-Fi drops, the app is killed, ...), its seat and the game are kept for 90
 seconds and the app takes them back by itself. See [Reconnection](#reconnection).
@@ -128,10 +129,10 @@ server sends back, so neither app can cheat or get out of sync.
 - `ws://<server>:8080/ws?name=<you>&room=<code>` joins a room (max 2 players, unique names per room). Adding
   `&token=<seat token>` takes an existing seat back (see Reconnection).
 - Client messages are JSON with a `type`: `chat`, `startGame` (a `game`: `tictactoe`, `battleship`, `connectfour`,
-  `othello`, `checkers`, `dotsandboxes`, `oware`, `mastermind`, `hex` or `memory`), `move` (a `cell`, which for Dots
-  and Boxes is a line number, for Oware a pit number and for Memory a card number, `from` and `to` for checkers, or a
-  `code` for a Mastermind guess), `place` (Battleship fleet), `secret` (your Mastermind `code`), `swap` (Hex swap
-  rule), `leave`.
+  `othello`, `checkers`, `dotsandboxes`, `oware`, `mastermind`, `hex`, `memory` or `quarto`), `move` (a `cell`, which
+  for Dots and Boxes is a line number, for Oware a pit number and for Memory a card number, `from` and `to` for
+  checkers, a `code` for a Mastermind guess, or a `piece` for the Quarto piece you give your opponent), `place`
+  (Battleship fleet), `secret` (your Mastermind `code`), `swap` (Hex swap rule), `leave`.
 - The server replies with `chat`, `system`, `error` (only to the sender) and `game` messages. Each game has its own
   state object; Battleship and Mastermind send every player a different view so ships and codes stay hidden, and
   Memory never sends the face of a card that is face down. Every `game` message has a `version` that grows with each
@@ -147,7 +148,7 @@ server and the app both use.
 | What | Where (under `core/src/main/kotlin/com/classicgames/core`, `app/src/main/kotlin/com/classicgames/app`) |
 |---|---|
 | Rooms, seats, grace period, history | `core`: `Hub.kt`, `GameServer.kt` |
-| Game rules | `core`: `TicTacToe.kt`, `Battleship.kt`, `ConnectFour.kt`, `Othello.kt`, `Checkers.kt`, `DotsAndBoxes.kt`, `Oware.kt`, `Mastermind.kt`, `Hex.kt`, `Memory.kt` |
+| Game rules | `core`: `TicTacToe.kt`, `Battleship.kt`, `ConnectFour.kt`, `Othello.kt`, `Checkers.kt`, `DotsAndBoxes.kt`, `Oware.kt`, `Mastermind.kt`, `Hex.kt`, `Memory.kt`, `Quarto.kt` |
 | Shared game interface and protocol | `core`: `Game.kt`, `Protocol.kt` |
 | Connection, reconnecting, saved seat | `app`: `data/ChatClient.kt`, `ui/AppViewModel.kt`, `data/SettingsStore.kt` |
 | The server inside the phone | `app`: `server/ServerService.kt`, `server/PhoneServer.kt` |
