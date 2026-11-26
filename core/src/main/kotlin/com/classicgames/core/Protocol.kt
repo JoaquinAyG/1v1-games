@@ -13,12 +13,23 @@ data class ShipPlacement(val cells: List<Int>)
  *  - "chat":      [text]
  *  - "leave":     goodbye for good: the seat is freed at once (without it, a dropped connection keeps the seat
  *                 for a while so the player can come back)
- *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello" or "checkers")
+ *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello", "checkers" or "dotsandboxes")
  *  - "move":      [cell] (tic-tac-toe: 0..8 row by row; battleship: 0..99 row by row, the cell to fire at;
- *                 connect four: the column 0..6 to drop a disc into; othello: 0..63 row by row),
+ *                 connect four: the column 0..6 to drop a disc into; othello: 0..63 row by row;
+ *                 dots and boxes: the line to draw, see below),
  *                 or [from] and [to] (checkers: 0..63 row by row, one step or one jump)
  *  - "place":     [ships] (battleship: your whole fleet, once)
  * A frame that is not JSON at all is treated as a chat message with that text.
+ *
+ * Dots and Boxes lines, on a board of n x n boxes ([DotsState.size], 5 by default) with dot rows and dot
+ * columns 0..n counted from the top-left, are numbered horizontal lines first, then vertical lines:
+ *  - 0 until n * (n + 1): horizontal, row by row. Line row * n + column joins dot (row, column) to the dot on
+ *    its right, for row 0..n and column 0 until n.
+ *  - n * (n + 1) until 2 * n * (n + 1): vertical, row by row. Line n * (n + 1) + row * (n + 1) + column joins
+ *    dot (row, column) to the dot below it, for row 0 until n and column 0..n.
+ * So box (row, column) has the sides row * n + column (top), (row + 1) * n + column (bottom),
+ * n * (n + 1) + row * (n + 1) + column (left) and that plus 1 (right). On the 5 x 5 board that is 30 horizontal
+ * lines (0..29) and 30 vertical lines (30..59).
  */
 @Serializable
 data class ClientMessage(
@@ -123,6 +134,32 @@ data class OthelloState(
 )
 
 /**
+ * Snapshot of a Dots and Boxes game, sent to both players after every change.
+ * [size] is the number of boxes per side (n). [lines] has 2 * n * (n + 1) characters, one per line in the order
+ * described on [ClientMessage]: '.' not drawn yet, 'R' or 'B' for the player (red or blue) who drew it.
+ * [boxes] has n * n characters, row by row from the top-left: '.' open, 'R' or 'B' for the player who closed it.
+ * [turn] is "R" or "B": the player to draw next, which stays the same after a line that closed a box.
+ * [status] is "playing", "won" or "draw". [lastLine] is the line drawn last (-1 before the first move), and
+ * [closed] lists the boxes that line completed (empty, one or two boxes).
+ */
+@Serializable
+data class DotsState(
+    val game: String,
+    val size: Int,
+    val lines: String,
+    val boxes: String,
+    val redPlayer: String,
+    val bluePlayer: String,
+    val turn: String,
+    val status: String,
+    val winner: String? = null,
+    val redScore: Int,
+    val blueScore: Int,
+    val lastLine: Int = -1,
+    val closed: List<Int> = emptyList(),
+)
+
+/**
  * A Battleship game as ONE player sees it; each player gets their own version, so the opponent's
  * ships are never revealed until the game is over. Boards are 100 characters, row by row.
  *  - [phase]: "placing" (players are setting up), "playing" or "finished".
@@ -153,7 +190,8 @@ data class BattleState(
  *  - "chat":   a player's message ([from], [text])
  *  - "system": a notice from the server (joins, leaves)
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
- *              [othello] for Othello or [checkers] for Checkers; all null means "no game any more".
+ *              [othello] for Othello, [checkers] for Checkers or [dots] for Dots and Boxes; all null means
+ *              "no game any more".
  *              [version] grows with every change to the room's game. Two changes made at nearly the same time
  *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
  *              one you applied (an equal one, as sent on reconnect, is the same state again).
@@ -179,6 +217,7 @@ data class ServerMessage(
     val connect: ConnectState? = null,
     val othello: OthelloState? = null,
     val checkers: CheckersState? = null,
+    val dots: DotsState? = null,
     val token: String? = null,
     val history: List<HistoryLine>? = null,
     val version: Long = 0,

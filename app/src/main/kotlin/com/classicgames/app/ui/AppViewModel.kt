@@ -19,6 +19,7 @@ import com.classicgames.core.BattleState
 import com.classicgames.core.CheckersState
 import com.classicgames.core.ClientMessage
 import com.classicgames.core.ConnectState
+import com.classicgames.core.DotsState
 import com.classicgames.core.GameState
 import com.classicgames.core.OthelloState
 import com.classicgames.core.ServerMessage
@@ -66,6 +67,8 @@ data class RoomUi(
     val othello: OthelloState? = null,
     /** The Checkers game running in this room, if any. */
     val checkers: CheckersState? = null,
+    /** The Dots and Boxes game running in this room, if any. */
+    val dots: DotsState? = null,
     /** The game whose tile was tapped in the lobby to host this room; the room offers it first. */
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
@@ -284,10 +287,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             connect = msg.connect,
             othello = msg.othello,
             checkers = msg.checkers,
+            dots = msg.dots,
             notice = null,
             // No game at all means it was cancelled (the other player left): say so in the chat.
             lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
-                msg.othello == null && msg.checkers == null
+                msg.othello == null && msg.checkers == null && msg.dots == null
             ) {
                 room.lines + ChatLine("server", msg.text, system = true)
             } else {
@@ -330,6 +334,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Plays [cell]. Tic-tac-toe: 0..8, row by row. Battleship: 0..99, the cell to fire at.
      * Connect Four: the column (0..6) to drop a disc into. Othello: 0..63, row by row.
+     * Dots and Boxes: the line to draw (numbered as described on [ClientMessage]).
      * The server validates it and answers with the new state.
      */
     fun playCell(cell: Int) {

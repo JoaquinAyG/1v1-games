@@ -372,6 +372,66 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun dotsAndBoxesOverWebSocketPlaysAWholeGame() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+
+        client.webSocket("/ws?name=Ann&room=BOXES") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=BOXES") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                ann.say(ClientMessage(type = "startGame", game = "dotsandboxes"))
+                val start = ann.next()
+                bob.next()
+                var state = start.dots!!
+                var version = start.version
+                val n = state.size
+                assertEquals("Ann", state.redPlayer)
+                assertEquals("Bob", state.bluePlayer)
+                assertEquals("R", state.turn)
+                assertEquals(DotsAndBoxes.lineCount(n), state.lines.length)
+
+                // Blue can't open, and only Bob hears about it.
+                bob.say(move(0))
+                assertEquals("Not your turn", bob.next().text)
+
+                // Every line in order, each drawn by whoever's turn it is. The horizontal lines close nothing.
+                // Then each row of boxes goes to the player who draws its second vertical line: they keep the
+                // turn to the end of the row and pass it on with the next row's first line. Bob gets row 0.
+                for (line in 0 until DotsAndBoxes.lineCount(n)) {
+                    (if (state.turn == "R") ann else bob).say(move(line))
+                    val annMessage = ann.next()
+                    val bobMessage = bob.next()
+                    assertEquals(annMessage.dots, bobMessage.dots)
+                    assertEquals(annMessage.version, bobMessage.version)
+                    assertTrue(annMessage.version > version)
+                    version = annMessage.version
+                    state = annMessage.dots!!
+                    assertEquals(line, state.lastLine)
+
+                    if (line == DotsAndBoxes.verticalLine(n, 0, 1)) {
+                        assertEquals(listOf(0), state.closed) // the first box...
+                        assertEquals("B", state.turn)         // ...and Bob draws again
+                    }
+                }
+
+                val blueRows = (n + 1) / 2 // rows 0, 2, 4, ...
+                assertEquals(blueRows * n, state.blueScore)
+                assertEquals((n - blueRows) * n, state.redScore)
+                assertEquals(if (n % 2 == 1) "won" else "draw", state.status)
+                if (n % 2 == 1) assertEquals("Bob", state.winner)
+
+                ann.say(move(0))
+                assertEquals("The game is over", ann.next().text)
+            }
+        }
+    }
+
+    @Test
     fun longChatMessagesAreCut() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }
