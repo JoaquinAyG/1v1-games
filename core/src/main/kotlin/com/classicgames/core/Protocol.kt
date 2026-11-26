@@ -14,11 +14,12 @@ data class ShipPlacement(val cells: List<Int>)
  *  - "leave":     goodbye for good: the seat is freed at once (without it, a dropped connection keeps the seat
  *                 for a while so the player can come back)
  *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello", "checkers", "dotsandboxes",
- *                 "oware", "mastermind" or "hex")
+ *                 "oware", "mastermind", "hex" or "memory")
  *  - "move":      [cell] (tic-tac-toe: 0..8 row by row; battleship: 0..99 row by row, the cell to fire at;
  *                 connect four: the column 0..6 to drop a disc into; othello: 0..63 row by row;
  *                 dots and boxes: the line to draw, see below; oware: the pit to sow from, see below;
- *                 hex: the cell to put a stone on, see below),
+ *                 hex: the cell to put a stone on, see below; memory: the card to flip, 0 until columns * rows
+ *                 row by row),
  *                 or [from] and [to] (checkers: 0..63 row by row, one step or one jump),
  *                 or [code] (mastermind: your guess at the opponent's code)
  *  - "place":     [ships] (battleship: your whole fleet, once)
@@ -289,6 +290,36 @@ data class HexState(
 )
 
 /**
+ * Snapshot of a Memory (pairs) game, sent to both players after every change. Cards are numbered row by row from the
+ * top-left (card = row * [columns] + column), and faces 0 until columns * rows / 2.
+ * [faces] has one entry per card: its face if it is face up or taken, or -1 while it is face down. The face of a
+ * face-down card is never sent, to anyone. [taken] has one character per card: '.' still in play, '1' taken by the
+ * first player or '2' by the second. [turn] is "1" or "2": the player who flips next. [status] is "playing", "won" or
+ * "draw".
+ * [flipped] is the card flipped first in the current turn (empty before it and once the second card is turned).
+ * [lastPair] are the two cards turned over last, and [lastMatched] says whether they were a pair: a pair is taken and
+ * its player flips again; two different cards end the turn but stay face up, until the next player flips a card.
+ */
+@Serializable
+data class MemoryState(
+    val game: String,
+    val columns: Int,
+    val rows: Int,
+    val faces: List<Int>,
+    val taken: String,
+    val firstPlayer: String,
+    val secondPlayer: String,
+    val turn: String,
+    val status: String,
+    val winner: String? = null,
+    val firstScore: Int,
+    val secondScore: Int,
+    val flipped: List<Int> = emptyList(),
+    val lastPair: List<Int> = emptyList(),
+    val lastMatched: Boolean = false,
+)
+
+/**
  * A Battleship game as ONE player sees it; each player gets their own version, so the opponent's
  * ships are never revealed until the game is over. Boards are 100 characters, row by row.
  *  - [phase]: "placing" (players are setting up), "playing" or "finished".
@@ -320,7 +351,7 @@ data class BattleState(
  *  - "system": a notice from the server (joins, leaves)
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
  *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes, [oware] for Oware,
- *              [mastermind] for Mastermind or [hex] for Hex; all null means "no game any more".
+ *              [mastermind] for Mastermind, [hex] for Hex or [memory] for Memory; all null means "no game any more".
  *              [version] grows with every change to the room's game. Two changes made at nearly the same time
  *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
  *              one you applied (an equal one, as sent on reconnect, is the same state again).
@@ -350,6 +381,7 @@ data class ServerMessage(
     val oware: OwareState? = null,
     val mastermind: MastermindState? = null,
     val hex: HexState? = null,
+    val memory: MemoryState? = null,
     val token: String? = null,
     val history: List<HistoryLine>? = null,
     val version: Long = 0,

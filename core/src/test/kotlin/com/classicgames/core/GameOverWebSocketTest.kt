@@ -658,6 +658,82 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun memoryOverWebSocketPlaysAWholeGameWithoutShowingFaceDownCards() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+
+        client.webSocket("/ws?name=Ann&room=PAIRS") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=PAIRS") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                var version = 0L
+                val known = HashMap<Int, Int>() // card -> face, as seen by both players
+
+                /** Reads the update both players get for one change and checks what it may show. */
+                suspend fun update(): MemoryState {
+                    val a = ann.next()
+                    val b = bob.next()
+                    assertEquals(a.memory, b.memory)
+                    assertEquals(a.version, b.version)
+                    assertTrue(a.version > version)
+                    version = a.version
+                    val s = a.memory!!
+                    for (card in s.faces.indices) {
+                        val faceUp = s.taken[card] != '.' || card in s.flipped || card in s.lastPair
+                        assertEquals(faceUp, s.faces[card] >= 0, "card $card in $s")
+                        if (faceUp) known[card] = s.faces[card]
+                    }
+                    return s
+                }
+
+                ann.say(ClientMessage(type = "startGame", game = "memory"))
+                var state = update()
+                assertEquals("Ann", state.firstPlayer)
+                assertEquals(List(24) { -1 }, state.faces)
+
+                bob.say(move(0))
+                assertEquals("Not your turn", bob.next().text)
+                ann.say(move(24))
+                assertEquals("Invalid card", ann.next().text)
+
+                // Both play with a perfect memory: a known pair if there is one, else an unknown card and then its
+                // known partner or another unknown card.
+                suspend fun flip(card: Int) {
+                    (if (state.turn == "1") ann else bob).say(move(card))
+                    state = update()
+                }
+                var turns = 0
+                while (state.status == "playing") {
+                    val open = state.taken.indices.filter { state.taken[it] == '.' }
+                    val pair = open.filter { it in known }.groupBy { known.getValue(it) }.values.firstOrNull { it.size == 2 }
+                    val a = pair?.get(0) ?: open.first { it !in known }
+                    flip(a)
+                    val b = pair?.get(1)
+                        ?: open.firstOrNull { it != a && known[it] == known[a] }
+                        ?: open.first { it != a && it !in known }
+                    flip(b)
+                    assertTrue(++turns < 100, "the game never ended")
+                }
+
+                assertEquals(12, state.firstScore + state.secondScore)
+                assertEquals((0 until 12).flatMap { listOf(it, it) }, state.faces.sorted())
+                when {
+                    state.firstScore > state.secondScore -> assertEquals("Ann", state.winner)
+                    state.secondScore > state.firstScore -> assertEquals("Bob", state.winner)
+                    else -> assertEquals("draw", state.status)
+                }
+
+                ann.say(move(0))
+                assertEquals("The game is over", ann.next().text)
+            }
+        }
+    }
+
+    @Test
     fun longChatMessagesAreCut() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }
