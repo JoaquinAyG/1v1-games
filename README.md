@@ -14,7 +14,7 @@ the phones**, so you don't even need a computer.
 | Dots and Boxes | 5x5 boxes: draw a line between two dots; closing a box scores it and you draw again. |
 | Oware | Abapa rules, 12 pits of 4 seeds: capture pits of 2 or 3, feed an empty opponent, 25 seeds win. |
 | Mastermind | A duel: each player hides a code of 4 pegs in 6 colours and cracks the other's, 10 guesses each. |
-| Hex | 9x9 rhombus: join your two sides of the board with a chain of stones; the second player may swap. |
+| Hex | 7x7 rhombus: join your two sides of the board with a chain of stones; the second player may swap. |
 | Memory | 6x4 cards, 12 pairs: flip two cards; a pair is yours and you flip again, most pairs wins. |
 
 If a phone loses its connection (Wi-Fi drops, the app is killed, ...), its seat and the game are kept for 90

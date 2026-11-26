@@ -18,10 +18,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,8 +45,8 @@ val HexEmpty = Color(0xFFF3ECDD)
 val HexLine = Color(0xFF9C8B74)
 private val HexWinGlow = Color(0xFFFFC107)
 
-/** Space around the board for the coloured sides, in cell widths. */
-private const val MARGIN = 0.45f
+/** Space around the board for the coloured sides, in cell widths: just enough for half their stroke and its cap. */
+private const val MARGIN = 0.2f
 
 /**
  * Where everything sits on a Hex board of [n] x [n] cells drawn [width] pixels wide: pointy-top hexagons, every row
@@ -115,10 +112,9 @@ class HexGeometry(width: Float, private val n: Int) {
 }
 
 /**
- * The Hex board with both players' sides. On your turn tap an empty cell to pick it (it shows your stone faintly),
- * then tap it again or press "Place" to put your stone there; cells are small on a phone, so a stray tap never costs
- * a move. When the swap is allowed, "Swap" takes over the opponent's first stone. The last stone played has a dot,
- * and the winner's chain is highlighted.
+ * The Hex board with both players' sides. On your turn tap an empty cell to put your stone there; the board takes the
+ * card's full width so the cells are big enough for one tap. When the swap is allowed, "Swap" takes over the
+ * opponent's first stone. The last stone played has a dot, and the winner's chain is highlighted.
  */
 @Composable
 fun HexPanel(
@@ -136,18 +132,9 @@ fun HexPanel(
     val myTurn = playing && game.turn == (if (iAmRed) "R" else "B")
     val stones = game.board.count { it != '.' }
 
-    // The cell picked for the next stone; any change on the board forgets it.
-    var picked by remember(game.board, myTurn) { mutableStateOf<Int?>(null) }
-
-    fun place(cell: Int) {
-        picked = null
-        onCell(cell)
-    }
-
+    // No side padding: every dp of width goes to the board's cells.
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -172,32 +159,27 @@ fun HexPanel(
                 game.swapped && stones == 1 ->
                     if (iAmRed) "$opponent swapped: your first stone is now theirs, mirrored" else "You took over the first stone"
                 myTurn && game.canSwap -> "Place a stone, or swap to take over $opponent's first stone"
-                myTurn && picked != null -> "Tap the cell again (or Place) to put your stone there"
-                myTurn -> "Tap a cell to pick it"
+                myTurn -> "Tap a cell to place your stone"
                 else -> " "
             },
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 12.dp),
         )
 
-        Board(
-            game = game,
-            mine = if (iAmRed) 'R' else 'B',
-            picked = picked,
-            enabled = myTurn,
-            onTap = { cell -> if (cell == picked) place(cell) else picked = cell },
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Board(game = game, enabled = myTurn, onTap = onCell, modifier = Modifier.fillMaxWidth())
 
-        // Shown (disabled) during the opponent's turn too, so the card keeps its height from move to move.
-        if (playing) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (myTurn && game.canSwap) OutlinedButton(onClick = onSwap) { Text("Swap") }
-                Button(onClick = { picked?.let(::place) }, enabled = myTurn && picked != null) { Text("Place") }
-            }
+        // Below the board, so the board doesn't move when the button goes away after blue's first turn.
+        if (myTurn && game.canSwap) OutlinedButton(onClick = onSwap) { Text("Swap") }
+
+        notice?.let {
+            Text(
+                it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
         }
-
-        notice?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
         if (!playing) {
             Button(onClick = onPlayAgain) { Text("Play again") }
@@ -218,7 +200,7 @@ private fun Side(color: Color, name: String, sides: String, mine: Boolean) {
 }
 
 @Composable
-private fun Board(game: HexState, mine: Char, picked: Int?, enabled: Boolean, onTap: (Int) -> Unit, modifier: Modifier) {
+private fun Board(game: HexState, enabled: Boolean, onTap: (Int) -> Unit, modifier: Modifier) {
     val n = game.size
     // The board's shape only depends on the number of cells, so any width gives the height.
     val ratio = HexGeometry(1f, n).let { 1f / it.height }
@@ -235,15 +217,7 @@ private fun Board(game: HexState, mine: Char, picked: Int?, enabled: Boolean, on
                 }
             },
     ) {
-        val geometry = HexGeometry(size.width, n)
-        drawHexBoard(geometry, n, game.board, lastMove = game.lastMove, path = game.winningPath)
-
-        // The picked cell shows your stone faintly.
-        if (picked != null && game.board[picked] == '.') {
-            val color = if (mine == 'R') HexRed else HexBlue
-            drawPath(geometry.hexagon(picked, 0.92f), color.copy(alpha = 0.35f))
-            drawPath(geometry.hexagon(picked, 0.92f), color, style = Stroke(geometry.cell * 0.08f))
-        }
+        drawHexBoard(HexGeometry(size.width, n), n, game.board, lastMove = game.lastMove, path = game.winningPath)
     }
 }
 
