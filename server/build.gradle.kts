@@ -20,6 +20,6 @@ java {
 }
 
 application {
-    mainClass.set("com.classicgames.server.MainKt")
+    mainClass.set("com.onevonegames.server.MainKt")
     applicationName = "game-server" // the start scripts in the zip are bin/game-server(.bat)
 }

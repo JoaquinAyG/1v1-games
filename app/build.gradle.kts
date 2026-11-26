@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.classicgames.app"
+    namespace = "com.onevonegames.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.classicgames.app"
+        applicationId = "com.onevonegames.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 5
@@ -27,7 +27,7 @@ android {
     }
 
     // Keep the APK named after the app (the module is called "app").
-    base.archivesName.set("ClassicGames")
+    base.archivesName.set("1v1Games")
 
     packaging {
         resources {

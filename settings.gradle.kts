@@ -13,7 +13,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ClassicGames"
+rootProject.name = "1v1Games"
 
 // core   - game rules, rooms and the WebSocket protocol (plain Kotlin/JVM, used by both the PC server and the phone)
 // server - the PC launcher: a tiny main() around core

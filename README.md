@@ -1,4 +1,4 @@
-# Classic Games
+# 1v1 Games
 
 Play classic games for two with a friend on the same Wi-Fi, against each other or, in the cooperative ones,
 together. A small **Ktor server** relays moves and checks every rule, and an **Android app** (Jetpack Compose) is
@@ -25,7 +25,7 @@ If a phone loses its connection (Wi-Fi drops, the app is killed, ...), its seat 
 seconds and the app takes them back by itself. See [Reconnection](#reconnection).
 
 ```
-ClassicGames/
+1v1Games/
   core/     Game rules, rooms and the WebSocket protocol (Kotlin/JVM). Shared by the PC server and the app.
   server/   The PC launcher: a tiny main() around core.
   app/      The Android app. It is the client, and it can also run core's server inside the phone.
@@ -70,7 +70,7 @@ terminal:
 
 ```powershell
 .\gradlew.bat :app:assembleDebug
-adb install -r app\build\outputs\apk\debug\ClassicGames-debug.apk
+adb install -r app\build\outputs\apk\debug\1v1Games-debug.apk
 ```
 
 Notes:
@@ -153,12 +153,12 @@ server sends back, so neither app can cheat or get out of sync.
   `finished` with a `score` out of 25), with a `result` sentence. Either way, leaving in the middle cancels the game
   for the other player.
 
-The full message definitions are documented in `core/src/main/kotlin/com/classicgames/core/Protocol.kt`, which the
+The full message definitions are documented in `core/src/main/kotlin/com/onevonegames/core/Protocol.kt`, which the
 server and the app both use.
 
 ### Where things are
 
-| What | Where (under `core/src/main/kotlin/com/classicgames/core`, `app/src/main/kotlin/com/classicgames/app`) |
+| What | Where (under `core/src/main/kotlin/com/onevonegames/core`, `app/src/main/kotlin/com/onevonegames/app`) |
 |---|---|
 | Rooms, seats, grace period, history | `core`: `Hub.kt`, `GameServer.kt` |
 | Game rules | `core`: `TicTacToe.kt`, `Battleship.kt`, `ConnectFour.kt`, `Othello.kt`, `Checkers.kt`, `DotsAndBoxes.kt`, `Oware.kt`, `Mastermind.kt`, `Hex.kt`, `Memory.kt`, `Quarto.kt`, `Brisca.kt`, `Maze.kt`, `Hanabi.kt` |
