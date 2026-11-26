@@ -26,6 +26,7 @@ import com.classicgames.core.MastermindState
 import com.classicgames.core.MemoryState
 import com.classicgames.core.OthelloState
 import com.classicgames.core.OwareState
+import com.classicgames.core.QuartoState
 import com.classicgames.core.ServerMessage
 import com.classicgames.core.ShipPlacement
 import kotlinx.coroutines.Job
@@ -81,6 +82,8 @@ data class RoomUi(
     val hex: HexState? = null,
     /** The Memory game running in this room, if any. */
     val memory: MemoryState? = null,
+    /** The Quarto game running in this room, if any. */
+    val quarto: QuartoState? = null,
     /** The game whose tile was tapped in the lobby to host this room; the room offers it first. */
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
@@ -304,11 +307,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             mastermind = msg.mastermind,
             hex = msg.hex,
             memory = msg.memory,
+            quarto = msg.quarto,
             notice = null,
             // No game at all means it was cancelled (the other player left): say so in the chat.
             lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
                 msg.othello == null && msg.checkers == null && msg.dots == null && msg.oware == null &&
-                msg.mastermind == null && msg.hex == null && msg.memory == null
+                msg.mastermind == null && msg.hex == null && msg.memory == null && msg.quarto == null
             ) {
                 room.lines + ChatLine("server", msg.text, system = true)
             } else {
@@ -355,6 +359,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * Oware: the pit to sow from (0..11 counter-clockwise, as described on [ClientMessage]).
      * Hex: the cell to put a stone on (row * size + column, as described on [ClientMessage]).
      * Memory: the card to flip (row * columns + column).
+     * Quarto: the cell (0..15, row by row) to put the piece you were given on.
      * The server validates it and answers with the new state.
      */
     fun playCell(cell: Int) {
@@ -386,6 +391,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun guessCode(code: List<Int>) {
         if (_room.value?.state != ConnectionState.Connected) return
         active?.outgoing?.trySend(ClientMessage(type = "move", code = code))
+    }
+
+    /** Quarto: hands [piece] (0..15, one bit per trait, see QuartoState) from the pool to the opponent. */
+    fun givePiece(piece: Int) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", piece = piece))
     }
 
     /** Hex: instead of placing a stone on your first turn as the second player, take over the first stone. */

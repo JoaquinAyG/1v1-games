@@ -53,6 +53,7 @@ fun ChatScreen(
     onSetCode: (List<Int>) -> Unit,
     onGuessCode: (List<Int>) -> Unit,
     onSwap: () -> Unit,
+    onGivePiece: (Int) -> Unit,
     onLeave: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
@@ -137,6 +138,7 @@ fun ChatScreen(
         val mastermind = room.mastermind
         val hex = room.hex
         val memory = room.memory
+        val quarto = room.quarto
         // Battleship needs lots of room, so its card takes what it needs and the chat shrinks to a short strip.
         val battleActive = battle != null
         // Mastermind grows with every guess, so its card stops at about 60% of the window and scrolls inside, and
@@ -240,6 +242,15 @@ fun ChatScreen(
                         onPlayAgain = { onStartGame("memory") },
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
+                    quarto != null -> QuartoPanel(
+                        game = quarto,
+                        myName = myName,
+                        notice = room.notice,
+                        onCell = onCell,
+                        onGive = onGivePiece,
+                        onPlayAgain = { onStartGame("quarto") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
                     else -> GamePicker(room.preferredGame, room.notice, onStartGame)
                 }
             }
@@ -300,7 +311,7 @@ fun ChatScreen(
 
 /**
  * Shown when no game is running: the game hosted from the lobby (or the first one) as the main button, then the
- * others. They wrap onto as few lines as fit, so with ten games the chat still keeps most of the screen.
+ * others. They wrap onto as few lines as fit, so even with a dozen games the chat still keeps most of the screen.
  */
 @Composable
 private fun GamePicker(preferred: String?, notice: String?, onStart: (String) -> Unit) {

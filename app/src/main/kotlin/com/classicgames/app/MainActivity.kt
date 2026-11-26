@@ -79,6 +79,7 @@ private fun AppRoot(viewModel: AppViewModel, onRequestNotifications: () -> Unit)
             onSetCode = viewModel::setSecretCode,
             onGuessCode = viewModel::guessCode,
             onSwap = viewModel::swapHex,
+            onGivePiece = viewModel::givePiece,
             onLeave = viewModel::leaveRoom,
         )
     }

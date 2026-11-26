@@ -60,6 +60,7 @@ val GAMES = listOf(
     GameEntry(id = "mastermind", title = "Mastermind", icon = { MastermindIcon() }),
     GameEntry(id = "hex", title = "Hex", icon = { HexIcon() }),
     GameEntry(id = "memory", title = "Memory", icon = { MemoryIcon() }),
+    GameEntry(id = "quarto", title = "Quarto", icon = { QuartoIcon() }),
 )
 
 /** Lays the games out in rows of [columns] tiles. Gaps in the last row stay empty so tiles keep their size. */
@@ -390,6 +391,36 @@ fun MemoryIcon(modifier: Modifier = Modifier) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** A corner of a Quarto board with four pieces that differ in every trait, drawn like the real ones. */
+@Composable
+fun QuartoIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxSize().padding(14.dp)) {
+        val side = size.minDimension
+        val left = (size.width - side) / 2f
+        val top = (size.height - side) / 2f
+        drawRoundRect(
+            QuartoBoard,
+            topLeft = Offset(left, top),
+            size = Size(side, side),
+            cornerRadius = CornerRadius(0.14f * side, 0.14f * side),
+        )
+        val gap = side * 0.05f
+        val cell = (side - 3 * gap) / 2f
+        // Row by row: tall dark round hollow, short light square solid, short dark square solid, tall light round hollow.
+        for ((i, piece) in listOf(1 + 2 + 8, 4, 2 + 4, 1 + 8).withIndex()) {
+            val cellLeft = left + gap + (i % 2) * (cell + gap)
+            val cellTop = top + gap + (i / 2) * (cell + gap)
+            drawRoundRect(
+                QuartoCell,
+                topLeft = Offset(cellLeft, cellTop),
+                size = Size(cell, cell),
+                cornerRadius = CornerRadius(0.18f * cell, 0.18f * cell),
+            )
+            drawQuartoPiece(piece, Offset(cellLeft + cell / 2, cellTop + cell / 2), cell, QuartoCell)
         }
     }
 }
