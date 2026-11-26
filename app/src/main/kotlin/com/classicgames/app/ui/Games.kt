@@ -35,6 +35,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** A game in the lobby. [icon] is null for "coming soon" placeholders. */
 class GameEntry(
@@ -51,6 +54,7 @@ val GAMES = listOf(
     GameEntry(id = "othello", title = "Othello", icon = { OthelloIcon() }),
     GameEntry(id = "checkers", title = "Checkers", icon = { CheckersIcon() }),
     GameEntry(id = "dotsandboxes", title = "Dots and Boxes", icon = { DotsAndBoxesIcon() }),
+    GameEntry(id = "oware", title = "Oware", icon = { OwareIcon() }),
 )
 
 /** Lays the games out in rows of [columns] tiles. Gaps in the last row stay empty so tiles keep their size. */
@@ -259,6 +263,41 @@ fun DotsAndBoxesIcon(modifier: Modifier = Modifier) {
         drawLine(DotsRed, dot(0, 1), dot(0, 2), stroke * 1.1f, StrokeCap.Round)
 
         for (row in 0..2) for (column in 0..2) drawCircle(DotsInk, radius = side * 0.055f, center = dot(row, column))
+    }
+}
+
+/** A wooden board with two rows of three pits holding a few seeds, drawn from scratch. */
+@Composable
+fun OwareIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxSize().padding(14.dp)) {
+        val w = size.width
+        val h = size.height
+        val boardTop = 0.2f * h
+        val boardHeight = 0.6f * h
+        drawRoundRect(
+            color = OwareWood,
+            topLeft = Offset(0.02f * w, boardTop),
+            size = Size(0.96f * w, boardHeight),
+            cornerRadius = CornerRadius(0.14f * w, 0.14f * w),
+        )
+
+        // 3 columns x 2 rows of pits, row by row from the top: how many seeds each holds.
+        val seeds = listOf(2, 0, 1, 3, 1, 4)
+        val pitW = 0.96f * w / 3f
+        val pitH = boardHeight / 2f
+        val pitRadius = minOf(pitW, pitH) * 0.38f
+        val seedRadius = pitRadius * 0.26f
+        for ((i, count) in seeds.withIndex()) {
+            val center = Offset(0.02f * w + pitW * (i % 3 + 0.5f), boardTop + pitH * (i / 3 + 0.5f))
+            drawCircle(OwarePit, radius = pitRadius, center = center)
+            // Seeds on a small ring around the middle of the pit (one seed sits in the middle).
+            val ring = if (count == 1) 0f else pitRadius * 0.45f
+            for (k in 0 until count) {
+                val angle = 2 * PI * k / count - PI / 2
+                val spot = center + Offset((ring * cos(angle)).toFloat(), (ring * sin(angle)).toFloat())
+                drawCircle(OwareSeed, radius = seedRadius, center = spot)
+            }
+        }
     }
 }
 
