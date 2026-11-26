@@ -915,6 +915,111 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun mazeOverWebSocketGuidesTheWalkerOutThenSwapsRolesAndEndsWhenOneLeaves() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+        fun step(direction: String) = ClientMessage(type = "move", direction = direction)
+        fun hint(direction: String) = ClientMessage(type = "hint", direction = direction)
+        val bits = mapOf("up" to 1, "right" to 2, "down" to 4, "left" to 8)
+
+        client.webSocket("/ws?name=Ann&room=MAZE") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=MAZE") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                var version = 0L
+
+                /** Reads the update both players get for one change, with the same newer version; guide's view first. */
+                suspend fun update(guide: DefaultClientWebSocketSession): Pair<MazeState, MazeState> {
+                    val a = ann.next()
+                    val b = bob.next()
+                    assertEquals(a.version, b.version)
+                    assertTrue(a.version > version)
+                    version = a.version
+                    val (g, w) = if (guide === ann) a.maze!! to b.maze!! else b.maze!! to a.maze!!
+                    assertEquals("guide", g.role)
+                    assertEquals("walker", w.role)
+                    assertEquals(g.window, w.window)
+                    assertEquals(g.movesUsed, w.movesUsed)
+                    assertEquals(g.hints, w.hints)
+                    if (w.status == "playing") {
+                        // The walker only gets the window: no walls, cells or trail.
+                        assertTrue(w.walls.isEmpty() && w.trail.isEmpty())
+                        assertEquals(listOf(-1, -1, -1), listOf(w.start, w.exit, w.position))
+                    }
+                    return g to w
+                }
+
+                ann.say(ClientMessage(type = "startGame", game = "maze"))
+                var (g, w) = update(ann)
+                assertEquals("Ann", g.guide)
+                assertEquals("Bob", g.walker)
+                assertEquals(8, g.size)
+
+                // The guide finds the way out on the map and hints every step; the walker follows.
+                val dist = Maze.distances(g.size, g.walls, g.exit)
+                val limit = g.moveLimit
+                bob.say(hint("up"))
+                assertEquals("Only Ann gives hints", bob.next().text)
+                ann.say(step("up"))
+                assertEquals("Only Bob moves: send them hints", ann.next().text)
+                while (g.status == "playing") {
+                    val here = g.position
+                    val direction = Maze.DIRECTIONS.first { d ->
+                        val next = Maze.neighbour(g.size, here, Maze.DIRECTIONS.indexOf(d))
+                        g.walls[here] and bits.getValue(d) == 0 && dist[next] == dist[here] - 1
+                    }
+                    ann.say(hint(direction))
+                    update(ann).let { (x, y) -> g = x; w = y }
+                    assertEquals(direction, w.hint)
+                    // Before moving on, the walker bumps into a wall of its window if it has one: refused, not counted.
+                    Maze.DIRECTIONS.firstOrNull { w.window[4] and bits.getValue(it) != 0 }?.let {
+                        bob.say(step(it))
+                        assertEquals("There's a wall that way", bob.next().text)
+                    }
+                    bob.say(step(w.hint))
+                    update(ann).let { (x, y) -> g = x; w = y }
+                }
+                assertEquals("won", w.status)
+                assertEquals(g.moveLimit, limit)
+                assertEquals(g.shortest, w.movesUsed)
+                assertEquals("Out in ${g.shortest} moves: the shortest way, a perfect run", w.result)
+                assertEquals(g.result, w.result)
+                // Now the walker sees the whole maze too.
+                assertEquals(g.walls, w.walls)
+                assertEquals(g.trail, w.trail)
+                bob.say(step("up"))
+                assertEquals("The game is over", bob.next().text)
+
+                // Play again: Bob guides and Ann walks.
+                ann.say(ClientMessage(type = "startGame", game = "maze"))
+                update(bob).let { (x, y) -> g = x; w = y }
+                assertEquals("Bob", g.guide)
+                assertEquals("Ann", g.walker)
+                assertEquals(0, w.movesUsed)
+                val open = Maze.DIRECTIONS.first { w.window[4] and bits.getValue(it) == 0 }
+                ann.say(step(open))
+                update(bob).let { (x, y) -> g = x; w = y }
+                assertEquals(1, w.movesUsed)
+
+                bob.say(ClientMessage(type = "leave")) // the guide leaves in the middle of the game
+            }
+
+            // The walker is told, and the game is gone for both: nobody won or lost it.
+            assertEquals("Bob left", ann.next().text)
+            val ended = ann.next()
+            assertEquals("game", ended.type)
+            assertNull(ended.maze)
+            assertEquals("Game ended because Bob left", ended.text)
+            ann.say(step("up"))
+            assertEquals("No game in progress", ann.next().text)
+        }
+    }
+
+    @Test
     fun longChatMessagesAreCut() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }
