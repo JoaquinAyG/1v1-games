@@ -9,13 +9,14 @@ import kotlin.test.assertTrue
 
 /**
  * Cells are numbered row by row and every row sits half a cell further right; Ann is red (top to bottom) and moves
- * first, Bob is blue (left to right). On the 9 x 9 board cell = row * 9 + column.
+ * first, Bob is blue (left to right). The rules don't depend on the size, so most tests use a 9 x 9 board, where
+ * cell = row * 9 + column; the ones about the board rooms use follow [Hex.SIZE].
  */
 class HexTest {
     private val ann = "Ann" // red
     private val bob = "Bob" // blue
 
-    private fun cell(row: Int, column: Int, size: Int = Hex.SIZE) = row * size + column
+    private fun cell(row: Int, column: Int, size: Int = 9) = row * size + column
 
     /** A board of [rows] (one string per row, '.', 'R' or 'B'). */
     private fun board(vararg rows: String) = rows.joinToString("")
@@ -23,8 +24,8 @@ class HexTest {
     @Test
     fun startsEmptyWithRedToMove() {
         val s = Hex(ann, bob).toState()
-        assertEquals(9, s.size)
-        assertEquals(".".repeat(81), s.board)
+        assertEquals(Hex.SIZE, s.size)
+        assertEquals(".".repeat(Hex.SIZE * Hex.SIZE), s.board)
         assertEquals("R", s.turn)
         assertEquals("playing", s.status)
         assertEquals(-1, s.lastMove)
@@ -51,7 +52,7 @@ class HexTest {
 
     @Test
     fun playersTakeTurnsPlacingStones() {
-        val g = Hex(ann, bob)
+        val g = Hex(ann, bob, size = 9)
         assertNull(g.play(ann, cell(4, 4)))
         var s = g.toState()
         assertEquals('R', s.board[cell(4, 4)])
@@ -68,7 +69,7 @@ class HexTest {
 
     @Test
     fun rejectsWrongTurnsTakenCellsAndCellsOffTheBoard() {
-        val g = Hex(ann, bob)
+        val g = Hex(ann, bob, size = 9)
         assertEquals("Not your turn", g.play(bob, 0))
         assertEquals("You are not in this game", g.play("Eve", 0))
         assertEquals("Invalid cell", g.play(ann, -1))
@@ -83,7 +84,7 @@ class HexTest {
 
     @Test
     fun swappingMirrorsTheFirstStoneAcrossTheLongDiagonalAndMakesItBlue() {
-        val g = Hex(ann, bob)
+        val g = Hex(ann, bob, size = 9)
         assertNull(g.play(ann, cell(2, 6)))
         assertNull(g.handle(bob, ClientMessage(type = "swap")))
         val s = g.toState()
@@ -104,7 +105,7 @@ class HexTest {
 
     @Test
     fun aStoneOnTheLongDiagonalStaysWhereItIsWhenSwapped() {
-        val g = Hex(ann, bob)
+        val g = Hex(ann, bob, size = 9)
         assertNull(g.play(ann, cell(4, 4)))
         assertNull(g.swap(bob))
         assertEquals(".".repeat(40) + "B" + ".".repeat(40), g.toState().board)
@@ -114,7 +115,7 @@ class HexTest {
 
     @Test
     fun onlyBlueMaySwapAndOnlyOnTheirFirstTurn() {
-        val g = Hex(ann, bob)
+        val g = Hex(ann, bob, size = 9)
         assertEquals("Not your turn", g.swap(bob)) // red has not moved yet
         assertEquals("Only Bob can swap", g.swap(ann))
         assertNull(g.play(ann, cell(0, 0)))
@@ -124,7 +125,7 @@ class HexTest {
         assertFalse(g.toState().canSwap)
 
         // After a swap, nobody can swap again.
-        val again = Hex(ann, bob)
+        val again = Hex(ann, bob, size = 9)
         assertNull(again.play(ann, cell(3, 3)))
         assertNull(again.swap(bob))
         assertEquals("Only Bob can swap", again.swap(ann))
@@ -134,7 +135,7 @@ class HexTest {
 
     @Test
     fun redWinsByJoiningTheTopAndTheBottom() {
-        val g = Hex(ann, bob)
+        val g = Hex(ann, bob, size = 9)
         // Red walks straight down column 0; blue plays along column 8, which never joins left and right.
         for (row in 0 until 9) {
             assertNull(g.play(ann, cell(row, 0)))
@@ -231,9 +232,10 @@ class HexTest {
     @Test
     fun everyGamePlayedToTheEndHasAWinnerAndAValidChain() {
         val random = Random(2026)
+        val n = Hex.SIZE
         repeat(30) {
             val g = Hex(ann, bob)
-            val empty = (0 until 81).shuffled(random).toMutableList()
+            val empty = (0 until n * n).shuffled(random).toMutableList()
             while (!g.finished) {
                 val mover = if (g.turn == 'R') ann else bob
                 assertNull(g.play(mover, empty.removeAt(0)))
@@ -242,13 +244,13 @@ class HexTest {
             val mark = if (s.winner == ann) 'R' else 'B'
             val path = s.winningPath
             assertTrue(path.all { s.board[it] == mark })
-            assertTrue(path.zipWithNext().all { (a, b) -> b in Hex.neighbours(9, a) })
+            assertTrue(path.zipWithNext().all { (a, b) -> b in Hex.neighbours(n, a) })
             if (mark == 'R') {
-                assertEquals(0, path.first() / 9)
-                assertEquals(8, path.last() / 9)
+                assertEquals(0, path.first() / n)
+                assertEquals(n - 1, path.last() / n)
             } else {
-                assertEquals(0, path.first() % 9)
-                assertEquals(8, path.last() % 9)
+                assertEquals(0, path.first() % n)
+                assertEquals(n - 1, path.last() % n)
             }
             // The game ended on the move that joined the sides.
             assertTrue(s.lastMove in path)

@@ -185,8 +185,11 @@ class Hex(val red: String, val blue: String, val size: Int = SIZE, start: String
     companion object {
         const val ID = "hex"
 
-        /** Cells per side of the board used in rooms. */
-        const val SIZE = 9
+        /**
+         * Cells per side of the board used in rooms. 7 rather than the classic 11 (or 9) because the board lies on its
+         * side, 1.5 * SIZE cells wide, and a phone screen has to fit it with cells big enough to tap in one go.
+         */
+        const val SIZE = 7
 
         /**
          * The cells touching [cell] on a board of [size] x [size]: above it (row - 1, column) and (row - 1, column + 1),

@@ -50,7 +50,7 @@ data class ShipPlacement(val cells: List<Int>)
  * A Mastermind code is a list of [MastermindState.pegs] colours (4 by default), from left to right, each colour a
  * number 0 until [MastermindState.colors] (6 by default). Repeats are allowed.
  *
- * Hex cells, on a board of n x n ([HexState.size], 9 by default), are numbered row by row from the top-left:
+ * Hex cells, on a board of n x n ([HexState.size], 7 by default), are numbered row by row from the top-left:
  * cell = row * n + column. Every row sits half a cell further right than the one above it, so the board is a rhombus
  * and cell (row, column) touches (row - 1, column), (row - 1, column + 1), (row, column - 1), (row, column + 1),
  * (row + 1, column - 1) and (row + 1, column). On a 3 x 3 board:

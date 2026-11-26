@@ -619,37 +619,39 @@ class GameOverWebSocketTest {
                 assertEquals("Ann", state.redPlayer)
                 assertEquals("Bob", state.bluePlayer)
                 assertEquals(Hex.SIZE, state.size)
+                val n = state.size
+                val centre = n / 2 * n + n / 2
 
                 // Bob can't open or swap yet, Ann can't swap at all. Only the sender hears about it.
-                bob.say(move(40))
+                bob.say(move(centre))
                 assertEquals("Not your turn", bob.next().text)
                 bob.say(swap)
                 assertEquals("Not your turn", bob.next().text)
 
                 // Ann opens in the centre, which is on the long diagonal: Bob's swap keeps it there, in blue.
-                ann.say(move(40))
+                ann.say(move(centre))
                 state = update()
                 assertTrue(state.canSwap)
                 ann.say(swap)
                 assertEquals("Not your turn", ann.next().text)
                 bob.say(swap)
                 state = update()
-                assertEquals('B', state.board[40])
+                assertEquals('B', state.board[centre])
                 assertTrue(state.swapped)
                 assertFalse(state.canSwap)
                 assertEquals("R", state.turn)
 
-                // Ann walks down column 0 while Bob plays down column 8, which never joins his sides.
-                for (row in 0 until 9) {
-                    ann.say(move(row * 9))
+                // Ann walks down the first column while Bob plays down the last one, which never joins his sides.
+                for (row in 0 until n) {
+                    ann.say(move(row * n))
                     state = update()
-                    if (row == 8) break
-                    bob.say(move(row * 9 + 8))
+                    if (row == n - 1) break
+                    bob.say(move(row * n + n - 1))
                     state = update()
                 }
                 assertEquals("won", state.status)
                 assertEquals("Ann", state.winner)
-                assertEquals((0 until 9).map { it * 9 }, state.winningPath)
+                assertEquals((0 until n).map { it * n }, state.winningPath)
 
                 bob.say(move(1))
                 assertEquals("The game is over", bob.next().text)
