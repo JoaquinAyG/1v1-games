@@ -372,6 +372,41 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun longChatMessagesAreCut() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+        client.webSocket("/ws?name=Ann&room=LONG") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=LONG") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                ann.say(ClientMessage(text = "a".repeat(MAX_CHAT_LENGTH + 100)))
+                assertEquals("a".repeat(MAX_CHAT_LENGTH), bob.next().text)
+
+                // An emoji (two UTF-16 chars) straddling the limit is dropped whole, not cut in half.
+                val emoji = "\uD83D\uDE00"
+                ann.say(ClientMessage(text = "b".repeat(MAX_CHAT_LENGTH - 1) + emoji))
+                assertEquals("b".repeat(MAX_CHAT_LENGTH - 1), bob.next().text)
+            }
+        }
+    }
+
+    @Test
+    fun anOversizedFrameClosesTheConnection() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+        client.webSocket("/ws?name=Ann&room=HUGE") {
+            handshake()
+            send(Frame.Text("x".repeat(65 * 1024)))
+            val reason = withTimeout(5_000) { closeReason.await() }
+            assertEquals(CloseReason.Codes.TOO_BIG, reason?.knownReason)
+        }
+    }
+
+    @Test
     fun oldChatFormatStillWorks() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }

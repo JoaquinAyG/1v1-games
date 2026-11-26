@@ -20,6 +20,12 @@ import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.seconds
 
+/** Longest chat message passed on to the room; anything longer is cut. */
+const val MAX_CHAT_LENGTH = 500
+
+/** Largest frame a client may send. Real messages are far smaller; a bigger frame closes the connection. */
+private const val MAX_FRAME_BYTES = 64 * 1024L
+
 /**
  * Creates (but does not start) the game server. Call `.start(wait = true)` on a PC, or `.start(wait = false)`
  * from the Android service. [extra] can add more routes, e.g. the PC launcher's test page.
@@ -40,6 +46,7 @@ fun Application.module(graceMillis: Long = DEFAULT_GRACE_MILLIS) {
         // Dead connections (a phone that lost Wi-Fi) are noticed within about 30 seconds.
         pingPeriod = 10.seconds
         timeout = 20.seconds
+        maxFrameSize = MAX_FRAME_BYTES
     }
 
     val hub = Hub(this, graceMillis)
@@ -103,7 +110,7 @@ fun Application.module(graceMillis: Long = DEFAULT_GRACE_MILLIS) {
                         .getOrElse { ClientMessage(text = raw) }
                     when (msg.type) {
                         "chat" -> if (msg.text.isNotBlank()) {
-                            hub.say(room, ServerMessage("chat", name, msg.text), except = name)
+                            hub.say(room, ServerMessage("chat", name, capChat(msg.text)), except = name)
                         }
                         "startGame" -> respond(hub.startGame(room, msg.game.orEmpty(), name))
                         "move", "place" -> respond(hub.act(room, name, msg))
@@ -135,4 +142,11 @@ fun Application.module(graceMillis: Long = DEFAULT_GRACE_MILLIS) {
             }
         }
     }
+}
+
+/** [text] cut to [MAX_CHAT_LENGTH] characters, without splitting an emoji's surrogate pair. */
+private fun capChat(text: String): String {
+    if (text.length <= MAX_CHAT_LENGTH) return text
+    val end = if (text[MAX_CHAT_LENGTH - 1].isHighSurrogate()) MAX_CHAT_LENGTH - 1 else MAX_CHAT_LENGTH
+    return text.substring(0, end)
 }
