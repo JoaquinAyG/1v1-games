@@ -137,10 +137,13 @@ class Hub(private val scope: CoroutineScope, private val graceMillis: Long = DEF
         announceDeparture(roomCode, name, cancelledGame)
     }
 
-    /** Removes the player; returns true if a game was running and is cancelled because of it. Call under the lock. */
+    /**
+     * Removes the player; returns true if an unfinished game is cancelled because of it. A finished game is dropped
+     * quietly, so the remaining player keeps its final board on screen. Call under the lock.
+     */
     private fun remove(room: Room, name: String): Boolean {
         room.members.remove(name)
-        val cancelled = room.game != null
+        val cancelled = room.game?.finished == false
         room.game = null
         if (room.members.isEmpty()) rooms.remove(room.code)
         return cancelled

@@ -113,6 +113,38 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun leavingAfterAFinishedGameKeepsTheFinalBoard() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+
+        client.webSocket("/ws?name=Ann&room=DONE") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=DONE") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                ann.say(start)
+                ann.next(); bob.next()
+                for ((who, cell) in listOf(ann to 0, bob to 3, ann to 1, bob to 4, ann to 2)) {
+                    who.say(move(cell))
+                    ann.next(); bob.next()
+                }
+
+                bob.say(ClientMessage(type = "leave")) // leaves after Ann won
+            }
+
+            // Ann hears that Bob left, but no "game" message clears her final board.
+            assertEquals("Bob left", ann.next().text)
+            ann.say(start)
+            val reply = ann.next()
+            assertEquals("error", reply.type)
+            assertEquals("Wait for a second player to join", reply.text)
+        }
+    }
+
+    @Test
     fun battleshipOverWebSocketGivesEachPlayerTheirOwnView() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }
