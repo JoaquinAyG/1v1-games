@@ -84,6 +84,7 @@ private fun AppRoot(viewModel: AppViewModel, onRequestNotifications: () -> Unit)
             onSwapSeven = viewModel::swapSeven,
             onMoveWalker = viewModel::moveWalker,
             onHint = viewModel::sendHint,
+            onHanabi = viewModel::hanabiAction,
             onLeave = viewModel::leaveRoom,
         )
     }

@@ -22,6 +22,7 @@ import com.classicgames.core.ClientMessage
 import com.classicgames.core.ConnectState
 import com.classicgames.core.DotsState
 import com.classicgames.core.GameState
+import com.classicgames.core.HanabiState
 import com.classicgames.core.HexState
 import com.classicgames.core.MastermindState
 import com.classicgames.core.MazeState
@@ -90,6 +91,8 @@ data class RoomUi(
     val brisca: BriscaState? = null,
     /** The Maze Guide game running in this room, if any (as this player sees it). */
     val maze: MazeState? = null,
+    /** The Hanabi game running in this room, if any (as this player sees it). */
+    val hanabi: HanabiState? = null,
     /** The game whose tile was tapped in the lobby to host this room; the room offers it first. */
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
@@ -316,12 +319,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             quarto = msg.quarto,
             brisca = msg.brisca,
             maze = msg.maze,
+            hanabi = msg.hanabi,
             notice = null,
             // No game at all means it was cancelled (the other player left): say so in the chat.
             lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
                 msg.othello == null && msg.checkers == null && msg.dots == null && msg.oware == null &&
                 msg.mastermind == null && msg.hex == null && msg.memory == null && msg.quarto == null &&
-                msg.brisca == null && msg.maze == null
+                msg.brisca == null && msg.maze == null && msg.hanabi == null
             ) {
                 room.lines + ChatLine("server", msg.text, system = true)
             } else {
@@ -430,6 +434,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun sendHint(direction: String) {
         if (_room.value?.state != ConnectionState.Connected) return
         active?.outgoing?.trySend(ClientMessage(type = "hint", direction = direction))
+    }
+
+    /**
+     * Hanabi: [action] "play" or "discard" the [card] at that position in your hand, or "hint" a [color] (0..4) or a
+     * [number] (1..5) in your partner's hand.
+     */
+    fun hanabiAction(action: String, card: Int?, color: Int?, number: Int?) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", action = action, card = card, color = color, number = number))
     }
 
     /** Hex: instead of placing a stone on your first turn as the second player, take over the first stone. */

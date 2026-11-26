@@ -58,6 +58,7 @@ fun ChatScreen(
     onSwapSeven: () -> Unit,
     onMoveWalker: (String) -> Unit,
     onHint: (String) -> Unit,
+    onHanabi: (action: String, card: Int?, color: Int?, number: Int?) -> Unit,
     onLeave: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
@@ -145,6 +146,7 @@ fun ChatScreen(
         val quarto = room.quarto
         val brisca = room.brisca
         val maze = room.maze
+        val hanabi = room.hanabi
         // Battleship needs lots of room, so its card takes what it needs and the chat shrinks to a short strip.
         val battleActive = battle != null
         // Mastermind grows with every guess, so its card stops at about 60% of the window and scrolls inside, and
@@ -271,6 +273,13 @@ fun ChatScreen(
                         onMove = onMoveWalker,
                         onHint = onHint,
                         onPlayAgain = { onStartGame("maze") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    hanabi != null -> HanabiPanel(
+                        game = hanabi,
+                        notice = room.notice,
+                        onAction = onHanabi,
+                        onPlayAgain = { onStartGame("hanabi") },
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
                     else -> GamePicker(room.preferredGame, room.notice, onStartGame)
