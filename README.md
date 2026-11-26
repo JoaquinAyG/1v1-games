@@ -77,6 +77,9 @@ Notes:
 
 - The SDK location goes in `local.properties` in the repository root (`sdk.dir=...`). Android Studio creates it; it
   is not committed.
+- The app needs `app\google-services.json` to build, and it is not committed either. Download it from the Firebase
+  console (Project settings, then the Android app `com.onevonegames.app`) and put it in the `app` folder. To use your
+  own Firebase project, register an Android app with that package name there.
 - The app targets Android 8.0+ (minSdk 26) and uses plain `http`/`ws` on the local network.
 
 ## Host the server on a phone (no PC needed)

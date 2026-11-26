@@ -9,6 +9,9 @@ out/
 # Machine-specific paths (the Android SDK location)
 local.properties
 
+# Firebase project settings: each developer downloads their own (see README)
+google-services.json
+
 # Android build artifacts
 *.apk
 *.aab
