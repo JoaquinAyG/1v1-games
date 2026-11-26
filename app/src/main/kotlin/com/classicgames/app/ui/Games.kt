@@ -50,6 +50,7 @@ val GAMES = listOf(
     GameEntry(id = "connectfour", title = "Connect Four", icon = { ConnectFourIcon() }),
     GameEntry(id = "othello", title = "Othello", icon = { OthelloIcon() }),
     GameEntry(id = "checkers", title = "Checkers", icon = { CheckersIcon() }),
+    GameEntry(id = "dotsandboxes", title = "Dots and Boxes", icon = { DotsAndBoxesIcon() }),
 )
 
 /** Lays the games out in rows of [columns] tiles. Gaps in the last row stay empty so tiles keep their size. */
@@ -229,6 +230,35 @@ fun OthelloIcon(modifier: Modifier = Modifier) {
             val center = Offset(left + cell * (i % 3 + 0.5f), top + cell * (i / 3 + 0.5f))
             drawCircle(if (mark == 'B') OthelloBlack else OthelloWhite, radius = cell * 0.36f, center = center)
         }
+    }
+}
+
+/** A 3 x 3 grid of dots with a red box and a blue box closed and the last line glowing, drawn from scratch. */
+@Composable
+fun DotsAndBoxesIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxSize().padding(20.dp)) {
+        val side = size.minDimension
+        val left = (size.width - side) / 2f
+        val top = (size.height - side) / 2f
+        val cell = side / 2f
+        fun dot(row: Int, column: Int) = Offset(left + column * cell, top + row * cell)
+
+        drawRect(DotsRed.copy(alpha = 0.35f), topLeft = dot(0, 0), size = Size(cell, cell))
+        drawRect(DotsBlue.copy(alpha = 0.35f), topLeft = dot(1, 1), size = Size(cell, cell))
+
+        // Lines as pairs of dots (row, column): the four sides of both boxes.
+        val lines = listOf(
+            (0 to 0) to (0 to 1), (1 to 0) to (1 to 1), (0 to 0) to (1 to 0), (0 to 1) to (1 to 1),
+            (1 to 1) to (1 to 2), (2 to 1) to (2 to 2), (1 to 1) to (2 to 1), (1 to 2) to (2 to 2),
+        )
+        val stroke = side * 0.05f
+        for ((a, b) in lines) {
+            drawLine(DotsInk, dot(a.first, a.second), dot(b.first, b.second), stroke, StrokeCap.Round)
+        }
+        drawLine(DotsLastLineGlow.copy(alpha = 0.7f), dot(0, 1), dot(0, 2), stroke * 2.4f, StrokeCap.Round)
+        drawLine(DotsRed, dot(0, 1), dot(0, 2), stroke * 1.1f, StrokeCap.Round)
+
+        for (row in 0..2) for (column in 0..2) drawCircle(DotsInk, radius = side * 0.055f, center = dot(row, column))
     }
 }
 

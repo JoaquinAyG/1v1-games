@@ -125,6 +125,7 @@ fun ChatScreen(
         val connect = room.connect
         val othello = room.othello
         val checkers = room.checkers
+        val dots = room.dots
         // Battleship needs lots of room, so its card takes what it needs and the chat shrinks to a short strip.
         val battleActive = battle != null
 
@@ -175,6 +176,14 @@ fun ChatScreen(
                         notice = room.notice,
                         onMove = onMovePiece,
                         onPlayAgain = { onStartGame("checkers") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    dots != null -> DotsAndBoxesPanel(
+                        game = dots,
+                        myName = myName,
+                        notice = room.notice,
+                        onLine = onCell,
+                        onPlayAgain = { onStartGame("dotsandboxes") },
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
                     else -> GamePicker(room.preferredGame, room.notice, onStartGame)
