@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -33,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,6 +49,8 @@ fun ChatScreen(
     onCell: (Int) -> Unit,
     onPlaceFleet: (List<List<Int>>) -> Unit,
     onMovePiece: (from: Int, to: Int) -> Unit,
+    onSetCode: (List<Int>) -> Unit,
+    onGuessCode: (List<Int>) -> Unit,
     onLeave: () -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
@@ -127,8 +132,13 @@ fun ChatScreen(
         val checkers = room.checkers
         val dots = room.dots
         val oware = room.oware
+        val mastermind = room.mastermind
         // Battleship needs lots of room, so its card takes what it needs and the chat shrinks to a short strip.
         val battleActive = battle != null
+        // Mastermind grows with every guess, so its card stops at about 60% of the window and scrolls inside, and
+        // the chat keeps the rest.
+        val mastermindMaxHeight =
+            with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.height * 0.6f).toDp() }
 
         // Keep showing the game while reconnecting: it is still there, we just can't play until we are back.
         if (connected || room.state == ConnectionState.Reconnecting) {
@@ -136,7 +146,13 @@ fun ChatScreen(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
-                    .then(if (battleActive) Modifier.weight(1f, fill = false) else Modifier),
+                    .then(
+                        when {
+                            battleActive -> Modifier.weight(1f, fill = false)
+                            mastermind != null -> Modifier.heightIn(max = mastermindMaxHeight)
+                            else -> Modifier
+                        },
+                    ),
             ) {
                 when {
                     tictactoe != null -> TicTacToePanel(
@@ -193,6 +209,14 @@ fun ChatScreen(
                         notice = room.notice,
                         onPit = onCell,
                         onPlayAgain = { onStartGame("oware") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    mastermind != null -> MastermindPanel(
+                        game = mastermind,
+                        notice = room.notice,
+                        onSetCode = onSetCode,
+                        onGuess = onGuessCode,
+                        onPlayAgain = { onStartGame("mastermind") },
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
                     else -> GamePicker(room.preferredGame, room.notice, onStartGame)
