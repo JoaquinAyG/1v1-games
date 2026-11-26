@@ -55,6 +55,7 @@ val GAMES = listOf(
     GameEntry(id = "checkers", title = "Checkers", icon = { CheckersIcon() }),
     GameEntry(id = "dotsandboxes", title = "Dots and Boxes", icon = { DotsAndBoxesIcon() }),
     GameEntry(id = "oware", title = "Oware", icon = { OwareIcon() }),
+    GameEntry(id = "mastermind", title = "Mastermind", icon = { MastermindIcon() }),
 )
 
 /** Lays the games out in rows of [columns] tiles. Gaps in the last row stay empty so tiles keep their size. */
@@ -296,6 +297,46 @@ fun OwareIcon(modifier: Modifier = Modifier) {
                 val angle = 2 * PI * k / count - PI / 2
                 val spot = center + Offset((ring * cos(angle)).toFloat(), (ring * sin(angle)).toFloat())
                 drawCircle(OwareSeed, radius = seedRadius, center = spot)
+            }
+        }
+    }
+}
+
+/** A board with three rows of coloured guesses, each with its black and white score pegs, drawn from scratch. */
+@Composable
+fun MastermindIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxSize().padding(14.dp)) {
+        val w = size.width
+        val h = size.height
+        drawRoundRect(
+            color = MastermindBoard,
+            topLeft = Offset(0.02f * w, 0.06f * h),
+            size = Size(0.96f * w, 0.88f * h),
+            cornerRadius = CornerRadius(0.12f * w, 0.12f * w),
+        )
+
+        // Three guesses, top to bottom (colour numbers), and their scores as (black, white).
+        val guesses = listOf(listOf(0, 1, 2, 3), listOf(1, 0, 3, 4), listOf(1, 3, 0, 0))
+        val scores = listOf(1 to 1, 2 to 2, 4 to 0)
+        val rowH = 0.88f * h / 3f
+        val pegR = minOf(0.068f * w, rowH * 0.4f)
+        val keyR = pegR * 0.42f
+        for ((row, guess) in guesses.withIndex()) {
+            val y = 0.06f * h + rowH * (row + 0.5f)
+            for ((i, color) in guess.withIndex()) {
+                val center = Offset(0.14f * w + i * 0.155f * w, y)
+                drawCircle(MastermindColors[color], radius = pegR, center = center)
+                drawCircle(Color.Black.copy(alpha = 0.25f), radius = pegR, center = center, style = Stroke(pegR * 0.12f))
+            }
+            val (black, white) = scores[row]
+            for (k in 0 until 4) {
+                val center = Offset(0.8f * w + (k % 2 - 0.5f) * keyR * 2.6f, y + (k / 2 - 0.5f) * keyR * 2.6f)
+                val color = when {
+                    k < black -> Color.Black
+                    k < black + white -> Color.White
+                    else -> Color.Black.copy(alpha = 0.2f)
+                }
+                drawCircle(color, radius = keyR, center = center)
             }
         }
     }

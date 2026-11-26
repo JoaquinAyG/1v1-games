@@ -13,13 +13,15 @@ data class ShipPlacement(val cells: List<Int>)
  *  - "chat":      [text]
  *  - "leave":     goodbye for good: the seat is freed at once (without it, a dropped connection keeps the seat
  *                 for a while so the player can come back)
- *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello", "checkers", "dotsandboxes" or
- *                 "oware")
+ *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello", "checkers", "dotsandboxes",
+ *                 "oware" or "mastermind")
  *  - "move":      [cell] (tic-tac-toe: 0..8 row by row; battleship: 0..99 row by row, the cell to fire at;
  *                 connect four: the column 0..6 to drop a disc into; othello: 0..63 row by row;
  *                 dots and boxes: the line to draw, see below; oware: the pit to sow from, see below),
- *                 or [from] and [to] (checkers: 0..63 row by row, one step or one jump)
+ *                 or [from] and [to] (checkers: 0..63 row by row, one step or one jump),
+ *                 or [code] (mastermind: your guess at the opponent's code)
  *  - "place":     [ships] (battleship: your whole fleet, once)
+ *  - "secret":    [code] (mastermind: the code your opponent has to crack, once)
  * A frame that is not JSON at all is treated as a chat message with that text.
  *
  * Dots and Boxes lines, on a board of n x n boxes ([DotsState.size], 5 by default) with dot rows and dot
@@ -41,6 +43,9 @@ data class ShipPlacement(val cells: List<Int>)
  * ```
  * A move must be one of your own pits that holds seeds and, when the opponent has none, gives them some: exactly
  * the pits in [OwareState.legalMoves].
+ *
+ * A Mastermind code is a list of [MastermindState.pegs] colours (4 by default), from left to right, each colour a
+ * number 0 until [MastermindState.colors] (6 by default). Repeats are allowed.
  */
 @Serializable
 data class ClientMessage(
@@ -51,6 +56,7 @@ data class ClientMessage(
     val ships: List<ShipPlacement>? = null,
     val from: Int? = null,
     val to: Int? = null,
+    val code: List<Int>? = null,
 )
 
 /**
@@ -198,6 +204,49 @@ data class OwareState(
     val event: String = "",
 )
 
+/** One Mastermind guess: the [code] guessed and its score. */
+@Serializable
+data class MastermindGuess(
+    val code: List<Int>,
+    /** Pegs of the right colour in the right place. */
+    val black: Int,
+    /** Pegs of the right colour in the wrong place. */
+    val white: Int,
+)
+
+/**
+ * A Mastermind duel as ONE player sees it; each player gets their own version, so the opponent's code is never
+ * sent until the game is over. Codes are lists of colours 0 until [colors], see [ClientMessage].
+ *  - [phase]: "secret" (players are choosing their codes), "guessing" or "finished".
+ *  - [firstPlayer] guesses first in every round. The second player always gets their guess in a round, even after
+ *    the first player cracked the code, so both get the same number of guesses.
+ *  - [yourSecret]: the code you chose (empty until you set it). [opponentSecret]: theirs, only once finished.
+ *  - [yourGuesses]: your guesses at the opponent's code; [opponentGuesses]: theirs at yours. Oldest first.
+ *  - [winner]: who cracked the code first, counted in rounds; null while playing and when the game ended in a
+ *    draw (both cracked it in the same round, or nobody did in [maxGuesses] guesses each).
+ *  - [event]: a short sentence about what just happened, written for this player.
+ */
+@Serializable
+data class MastermindState(
+    val game: String,
+    val phase: String,
+    val you: String,
+    val opponent: String,
+    val firstPlayer: String,
+    val pegs: Int,
+    val colors: Int,
+    val maxGuesses: Int,
+    val youReady: Boolean,
+    val opponentReady: Boolean,
+    val yourTurn: Boolean,
+    val yourSecret: List<Int> = emptyList(),
+    val opponentSecret: List<Int> = emptyList(),
+    val yourGuesses: List<MastermindGuess> = emptyList(),
+    val opponentGuesses: List<MastermindGuess> = emptyList(),
+    val winner: String? = null,
+    val event: String = "",
+)
+
 /**
  * A Battleship game as ONE player sees it; each player gets their own version, so the opponent's
  * ships are never revealed until the game is over. Boards are 100 characters, row by row.
@@ -229,8 +278,8 @@ data class BattleState(
  *  - "chat":   a player's message ([from], [text])
  *  - "system": a notice from the server (joins, leaves)
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
- *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes or [oware] for Oware;
- *              all null means "no game any more".
+ *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes, [oware] for Oware or
+ *              [mastermind] for Mastermind; all null means "no game any more".
  *              [version] grows with every change to the room's game. Two changes made at nearly the same time
  *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
  *              one you applied (an equal one, as sent on reconnect, is the same state again).
@@ -258,6 +307,7 @@ data class ServerMessage(
     val checkers: CheckersState? = null,
     val dots: DotsState? = null,
     val oware: OwareState? = null,
+    val mastermind: MastermindState? = null,
     val token: String? = null,
     val history: List<HistoryLine>? = null,
     val version: Long = 0,

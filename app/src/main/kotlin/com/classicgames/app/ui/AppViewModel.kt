@@ -21,6 +21,7 @@ import com.classicgames.core.ClientMessage
 import com.classicgames.core.ConnectState
 import com.classicgames.core.DotsState
 import com.classicgames.core.GameState
+import com.classicgames.core.MastermindState
 import com.classicgames.core.OthelloState
 import com.classicgames.core.OwareState
 import com.classicgames.core.ServerMessage
@@ -72,6 +73,8 @@ data class RoomUi(
     val dots: DotsState? = null,
     /** The Oware game running in this room, if any. */
     val oware: OwareState? = null,
+    /** The Mastermind game running in this room, if any (as this player sees it). */
+    val mastermind: MastermindState? = null,
     /** The game whose tile was tapped in the lobby to host this room; the room offers it first. */
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
@@ -292,10 +295,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             checkers = msg.checkers,
             dots = msg.dots,
             oware = msg.oware,
+            mastermind = msg.mastermind,
             notice = null,
             // No game at all means it was cancelled (the other player left): say so in the chat.
             lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
-                msg.othello == null && msg.checkers == null && msg.dots == null && msg.oware == null
+                msg.othello == null && msg.checkers == null && msg.dots == null && msg.oware == null &&
+                msg.mastermind == null
             ) {
                 room.lines + ChatLine("server", msg.text, system = true)
             } else {
@@ -358,6 +363,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_room.value?.state != ConnectionState.Connected) return
         _room.update { it?.copy(notice = null) }
         active?.outgoing?.trySend(ClientMessage(type = "place", ships = ships.map { ShipPlacement(it) }))
+    }
+
+    /** Mastermind: sets the code the opponent has to crack (one colour 0..5 per peg). Can only be done once per game. */
+    fun setSecretCode(code: List<Int>) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        _room.update { it?.copy(notice = null) }
+        active?.outgoing?.trySend(ClientMessage(type = "secret", code = code))
+    }
+
+    /** Mastermind: guesses the opponent's code (one colour 0..5 per peg). */
+    fun guessCode(code: List<Int>) {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "move", code = code))
     }
 
     /** Leaves the room for good: the seat is freed on the server, and the saved seat is forgotten. */
