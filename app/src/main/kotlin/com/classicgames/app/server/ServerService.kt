@@ -32,6 +32,14 @@ import java.net.BindException
  */
 class ServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var startRequested = false
+
+    /**
+     * Guards [destroyed] and the resources below. The start coroutine sets them up on a background thread while
+     * [onDestroy] may run at any moment on the main thread, even while the engine is still starting.
+     */
+    private val lock = Any()
+    private var destroyed = false
     private var server: io.ktor.server.engine.EmbeddedServer<*, *>? = null
     private var wifiLock: WifiManager.WifiLock? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -54,7 +62,10 @@ class ServerService : Service() {
         ServiceCompat.startForeground(
             this, NOTIFICATION_ID, notification(emptyList()), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
-        if (server == null) startServer()
+        if (!startRequested) {
+            startRequested = true
+            startServer()
+        }
         return START_NOT_STICKY
     }
 
@@ -62,11 +73,23 @@ class ServerService : Service() {
         PhoneServer.setState(PhoneServerState.Starting)
         scope.launch {
             try {
-                server = createGameServer(port = PhoneServer.PORT, host = "0.0.0.0").start(wait = false)
-                holdWifiAwake()
-                watchNetwork()
+                val started = createGameServer(port = PhoneServer.PORT, host = "0.0.0.0").start(wait = false)
+                val alive = synchronized(lock) {
+                    if (!destroyed) {
+                        server = started
+                        holdWifiAwake()
+                        watchNetwork()
+                    }
+                    !destroyed
+                }
+                if (!alive) {
+                    // onDestroy ran while start() was busy and had no engine to stop yet: free the port here.
+                    runCatching { started.stop(300, 1_000) }
+                    return@launch
+                }
                 publishAddresses()
             } catch (e: Throwable) {
+                if (synchronized(lock) { destroyed }) return@launch
                 val reason = if (e is BindException || e.cause is BindException) {
                     "Port ${PhoneServer.PORT} is already in use on this phone."
                 } else {
@@ -81,11 +104,18 @@ class ServerService : Service() {
     /** Publishes the current addresses to the app and to the notification. */
     private fun publishAddresses() {
         val addresses = PhoneServer.localAddresses()
-        PhoneServer.setState(PhoneServerState.Running(PhoneServer.PORT, addresses))
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(addresses))
+        synchronized(lock) {
+            // A network callback can still fire after onDestroy; it must not bring back Running or the notification.
+            if (destroyed) return
+            PhoneServer.setState(PhoneServerState.Running(PhoneServer.PORT, addresses))
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(addresses))
+        }
     }
 
-    /** Wi-Fi can change while hosting (reconnects, a different network); keep the shown address current. */
+    /**
+     * Wi-Fi can change while hosting (reconnects, a different network); keep the shown address current.
+     * Call under [lock].
+     */
     private fun watchNetwork() {
         val connectivity = getSystemService(ConnectivityManager::class.java)
         val callback = object : ConnectivityManager.NetworkCallback() {
@@ -97,7 +127,10 @@ class ServerService : Service() {
         runCatching { connectivity.registerDefaultNetworkCallback(callback) }
     }
 
-    /** Stops Wi-Fi from going to sleep while the screen is off, so friends can still reach this phone. */
+    /**
+     * Stops Wi-Fi from going to sleep while the screen is off, so friends can still reach this phone.
+     * Call under [lock].
+     */
     @Suppress("DEPRECATION")
     private fun holdWifiAwake() {
         runCatching {
@@ -142,6 +175,9 @@ class ServerService : Service() {
     }
 
     override fun onDestroy() {
+        // From here on the start coroutine sets nothing up any more. If the engine is still starting, server is null
+        // below and the coroutine stops the engine itself once start() returns.
+        synchronized(lock) { destroyed = true }
         networkCallback?.let { runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) } }
         wifiLock?.let { runCatching { if (it.isHeld) it.release() } }
         val running = server
