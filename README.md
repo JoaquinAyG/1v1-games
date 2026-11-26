@@ -125,9 +125,10 @@ server sends back, so neither app can cheat or get out of sync.
 - Client messages are JSON with a `type`: `chat`, `startGame`, `move` (a `cell`, or `from` and `to` for checkers),
   `place` (Battleship fleet), `leave`.
 - The server replies with `chat`, `system`, `error` (only to the sender) and `game` messages. Each game has its own
-  state object; Battleship sends every player a different view so ships stay hidden. Right after you connect it also
-  sends `session` (your seat token), `history` (recent chat) and, if a game is running, its current state;
-  `presence` tells you when the other player goes offline or comes back.
+  state object; Battleship sends every player a different view so ships stay hidden. Every `game` message has a
+  `version` that grows with each change: two updates can arrive out of order, so ignore one older than the last
+  you applied. Right after you connect it also sends `session` (your seat token), `history` (recent chat) and, if a
+  game is running, its current state; `presence` tells you when the other player goes offline or comes back.
 
 The full message definitions are documented in `core/src/main/kotlin/com/classicgames/core/Protocol.kt`, which the
 server and the app both use.

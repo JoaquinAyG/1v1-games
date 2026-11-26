@@ -54,6 +54,10 @@ private class Room(val code: String) {
     val members = LinkedHashMap<String, Member>()
     var game: Game? = null
     var gamesPlayed = 0
+
+    /** Bumped on every change to [game], under the lock, and sent as the "game" messages' version. */
+    var gameVersion = 0L
+
     val history = ArrayDeque<HistoryLine>()
 }
 
@@ -117,43 +121,43 @@ class Hub(private val scope: CoroutineScope, private val graceMillis: Long = DEF
 
     /** The player said goodbye for good: free the seat now, cancel their game, and tell the others. */
     suspend fun leave(roomCode: String, name: String, session: WebSocketSession) {
-        val cancelledGame = synchronized(lock) {
+        val cancellation = synchronized(lock) {
             val room = rooms[roomCode] ?: return
             val member = room.members[name] ?: return
             if (member.session !== session) return
             member.graceJob?.cancel()
             remove(room, name)
         }
-        announceDeparture(roomCode, name, cancelledGame)
+        announceDeparture(roomCode, name, cancellation)
     }
 
     /** The grace period of an offline [member] ran out. */
     private suspend fun expire(roomCode: String, name: String, member: Member) {
-        val cancelledGame = synchronized(lock) {
+        val cancellation = synchronized(lock) {
             val room = rooms[roomCode] ?: return
             if (room.members[name] !== member || member.session != null) return
             remove(room, name)
         }
-        announceDeparture(roomCode, name, cancelledGame)
+        announceDeparture(roomCode, name, cancellation)
     }
 
     /**
-     * Removes the player; returns true if an unfinished game is cancelled because of it. A finished game is dropped
-     * quietly, so the remaining player keeps its final board on screen. Call under the lock.
+     * Removes the player. If an unfinished game is cancelled because of it, returns the "game" message that tells
+     * the others; a finished game is dropped quietly, so the remaining player keeps its final board on screen.
+     * Call under the lock.
      */
-    private fun remove(room: Room, name: String): Boolean {
+    private fun remove(room: Room, name: String): ServerMessage? {
         room.members.remove(name)
         val cancelled = room.game?.finished == false
         room.game = null
         if (room.members.isEmpty()) rooms.remove(room.code)
-        return cancelled
+        if (!cancelled) return null
+        return ServerMessage("game", "server", "Game ended because $name left", version = ++room.gameVersion)
     }
 
-    private suspend fun announceDeparture(roomCode: String, name: String, cancelledGame: Boolean) {
+    private suspend fun announceDeparture(roomCode: String, name: String, cancellation: ServerMessage?) {
         say(roomCode, ServerMessage("system", "server", "$name left"))
-        if (cancelledGame) {
-            deliverToAll(roomCode, ServerMessage("game", "server", "Game ended because $name left"))
-        }
+        cancellation?.let { deliverToAll(roomCode, it) }
     }
 
     /** Random code that no live room is using. Letters/digits without look-alikes (no 0/O, 1/I/L). */
@@ -177,7 +181,7 @@ class Hub(private val scope: CoroutineScope, private val graceMillis: Long = DEF
         JoinSnapshot(
             history = room.history.toList(),
             offlinePeers = room.members.values.filter { it.name != name && it.session == null }.map { it.name },
-            gameMessage = room.game?.messageFor(name),
+            gameMessage = room.game?.messageFor(name)?.copy(version = room.gameVersion),
         )
     }
 
@@ -215,10 +219,19 @@ class Hub(private val scope: CoroutineScope, private val graceMillis: Long = DEF
         GameOutcome.Update(messagesFor(room, game))
     }
 
-    private fun messagesFor(room: Room, game: Game): Map<String, ServerMessage> =
-        room.members.keys.associateWith { game.messageFor(it) }
+    /**
+     * Each player's view of [game] after a change, stamped with the room's next game version. Call under the lock:
+     * the version order is then the order of the changes, however the messages overtake each other on the way out.
+     */
+    private fun messagesFor(room: Room, game: Game): Map<String, ServerMessage> {
+        val version = ++room.gameVersion
+        return room.members.keys.associateWith { game.messageFor(it).copy(version = version) }
+    }
 
-    /** Sends each player in the room their own message. Offline players are skipped (they catch up on return). */
+    /**
+     * Sends each player in the room their own message. Offline players are skipped (they catch up on return).
+     * Runs outside the lock, so two updates sent at once may arrive in either order; see [ServerMessage.version].
+     */
     suspend fun deliver(roomCode: String, messages: Map<String, ServerMessage>) {
         val targets = synchronized(lock) {
             rooms[roomCode]?.members?.mapValues { it.value.session }.orEmpty()

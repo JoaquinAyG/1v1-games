@@ -72,6 +72,8 @@ data class RoomUi(
     val notice: String? = null,
     /** Name of the other player while their connection is down (the server holds their seat for a while). */
     val opponentOffline: String? = null,
+    /** Version of the last "game" message applied; an older one that arrives late is ignored. */
+    val gameVersion: Long = 0,
 )
 
 /** Waits between reconnect attempts; the last value repeats. A network coming back skips the wait. */
@@ -275,7 +277,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             msg.text == "offline" -> room.copy(opponentOffline = msg.from)
             else -> room.copy(opponentOffline = null)
         }
-        "game" -> room.copy(
+        "game" -> if (msg.version < room.gameVersion) room else room.copy(
+            gameVersion = msg.version,
             game = msg.state,
             battle = msg.battle,
             connect = msg.connect,

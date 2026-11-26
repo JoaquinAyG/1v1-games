@@ -153,7 +153,10 @@ data class BattleState(
  *  - "chat":   a player's message ([from], [text])
  *  - "system": a notice from the server (joins, leaves)
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
- *              [othello] for Othello or [checkers] for Checkers; all null means "no game any more"
+ *              [othello] for Othello or [checkers] for Checkers; all null means "no game any more".
+ *              [version] grows with every change to the room's game. Two changes made at nearly the same time
+ *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
+ *              one you applied (an equal one, as sent on reconnect, is the same state again).
  *  - "error":  a rejected request, sent only to the player who made it
  *
  * Connection handling (sent only to the player who just connected, right after they get in):
@@ -178,6 +181,7 @@ data class ServerMessage(
     val checkers: CheckersState? = null,
     val token: String? = null,
     val history: List<HistoryLine>? = null,
+    val version: Long = 0,
 )
 
 /** One chat or system line from the room's recent history. [type] is "chat" or "system". */

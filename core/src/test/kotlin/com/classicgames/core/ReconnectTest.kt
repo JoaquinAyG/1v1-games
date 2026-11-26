@@ -57,11 +57,13 @@ class ReconnectTest {
             ann.handshake()
 
             var bobToken = ""
+            var lastVersion = 0L
             client.webSocket("/ws?name=Bob&room=BACK") {
                 bobToken = handshake()
                 assertEquals("Bob joined", ann.next().text)
                 ann.say(startTicTacToe); ann.next(); next()
-                ann.say(move(4)); ann.next(); next() // Ann (X) takes the centre; it is Bob's turn
+                ann.say(move(4)); ann.next() // Ann (X) takes the centre; it is Bob's turn
+                lastVersion = next().version
                 // ...and Bob's connection ends here, without a goodbye.
             }
 
@@ -84,6 +86,7 @@ class ReconnectTest {
                 assertEquals("game", game.type)
                 assertEquals("....X....", game.state!!.board)
                 assertEquals("O", game.state!!.turn)
+                assertEquals(lastVersion, game.version) // the same state again, not a newer one
 
                 assertEquals("Bob is back", ann.next().text)
                 val back = ann.next()

@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class GameOverWebSocketTest {
     private suspend fun DefaultClientWebSocketSession.next(): ServerMessage = withTimeout(5_000) {
@@ -141,6 +142,48 @@ class GameOverWebSocketTest {
             val reply = ann.next()
             assertEquals("error", reply.type)
             assertEquals("Wait for a second player to join", reply.text)
+        }
+    }
+
+    @Test
+    fun everyGameChangeGetsAHigherVersionSoLateUpdatesCanBeIgnored() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+
+        client.webSocket("/ws?name=Ann&room=ORDER") {
+            val ann = this
+            ann.handshake()
+            var lastMove = 0L
+            client.webSocket("/ws?name=Bob&room=ORDER") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                suspend fun change(who: DefaultClientWebSocketSession, msg: ClientMessage): Long {
+                    who.say(msg)
+                    val a = ann.next()
+                    val b = bob.next()
+                    assertEquals(a.version, b.version) // one change, one version for everybody
+                    return a.version
+                }
+
+                val started = change(ann, start)
+                val first = change(ann, move(0))
+                bob.say(move(0)) // rejected: changes nothing, so no version is used up
+                assertEquals("error", bob.next().type)
+                val second = change(bob, move(4))
+                assertTrue(started in 1 until first)
+                assertEquals(first + 1, second)
+                lastMove = second
+
+                bob.say(ClientMessage(type = "leave"))
+            }
+
+            // Cancelling the game is a change too, so a move delivered after it can't bring the game back.
+            assertEquals("Bob left", ann.next().text)
+            val ended = ann.next()
+            assertNull(ended.state)
+            assertTrue(ended.version > lastMove)
         }
     }
 
