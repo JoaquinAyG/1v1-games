@@ -135,6 +135,7 @@ fun ChatScreen(
         val oware = room.oware
         val mastermind = room.mastermind
         val hex = room.hex
+        val memory = room.memory
         // Battleship needs lots of room, so its card takes what it needs and the chat shrinks to a short strip.
         val battleActive = battle != null
         // Mastermind grows with every guess, so its card stops at about 60% of the window and scrolls inside, and
@@ -228,6 +229,14 @@ fun ChatScreen(
                         onCell = onCell,
                         onSwap = onSwap,
                         onPlayAgain = { onStartGame("hex") },
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                    memory != null -> MemoryPanel(
+                        game = memory,
+                        myName = myName,
+                        notice = room.notice,
+                        onCard = onCell,
+                        onPlayAgain = { onStartGame("memory") },
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
                     else -> GamePicker(room.preferredGame, room.notice, onStartGame)
