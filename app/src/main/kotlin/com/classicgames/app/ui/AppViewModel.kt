@@ -23,6 +23,7 @@ import com.classicgames.core.DotsState
 import com.classicgames.core.GameState
 import com.classicgames.core.HexState
 import com.classicgames.core.MastermindState
+import com.classicgames.core.MemoryState
 import com.classicgames.core.OthelloState
 import com.classicgames.core.OwareState
 import com.classicgames.core.ServerMessage
@@ -78,6 +79,8 @@ data class RoomUi(
     val mastermind: MastermindState? = null,
     /** The Hex game running in this room, if any. */
     val hex: HexState? = null,
+    /** The Memory game running in this room, if any. */
+    val memory: MemoryState? = null,
     /** The game whose tile was tapped in the lobby to host this room; the room offers it first. */
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
@@ -300,11 +303,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             oware = msg.oware,
             mastermind = msg.mastermind,
             hex = msg.hex,
+            memory = msg.memory,
             notice = null,
             // No game at all means it was cancelled (the other player left): say so in the chat.
             lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
                 msg.othello == null && msg.checkers == null && msg.dots == null && msg.oware == null &&
-                msg.mastermind == null && msg.hex == null
+                msg.mastermind == null && msg.hex == null && msg.memory == null
             ) {
                 room.lines + ChatLine("server", msg.text, system = true)
             } else {
@@ -350,6 +354,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * Dots and Boxes: the line to draw (numbered as described on [ClientMessage]).
      * Oware: the pit to sow from (0..11 counter-clockwise, as described on [ClientMessage]).
      * Hex: the cell to put a stone on (row * size + column, as described on [ClientMessage]).
+     * Memory: the card to flip (row * columns + column).
      * The server validates it and answers with the new state.
      */
     fun playCell(cell: Int) {

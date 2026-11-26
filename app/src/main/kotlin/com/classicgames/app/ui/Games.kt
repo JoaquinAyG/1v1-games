@@ -2,6 +2,7 @@ package com.classicgames.app.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +59,7 @@ val GAMES = listOf(
     GameEntry(id = "oware", title = "Oware", icon = { OwareIcon() }),
     GameEntry(id = "mastermind", title = "Mastermind", icon = { MastermindIcon() }),
     GameEntry(id = "hex", title = "Hex", icon = { HexIcon() }),
+    GameEntry(id = "memory", title = "Memory", icon = { MemoryIcon() }),
 )
 
 /** Lays the games out in rows of [columns] tiles. Gaps in the last row stay empty so tiles keep their size. */
@@ -359,6 +361,35 @@ fun HexIcon(modifier: Modifier = Modifier) {
                     ".RB." +
                     "....",
             )
+        }
+    }
+}
+
+/** Six small cards, two of them face up and matching, built from the same pieces as the real ones. */
+@Composable
+fun MemoryIcon(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically),
+    ) {
+        // Two rows of three: -1 is a card back, anything else a face number.
+        for (row in listOf(listOf(-1, 0, -1), listOf(-1, -1, 0))) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                for (face in row) {
+                    val shape = RoundedCornerShape(5.dp)
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .aspectRatio(0.78f)
+                            .clip(shape)
+                            .background(if (face < 0) MemoryBack else MemoryFaceUp)
+                            .then(if (face < 0) Modifier else Modifier.border(2.dp, MemoryJustTurned, shape)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (face < 0) MemoryCardBack(Modifier.fillMaxSize().padding(3.dp)) else Text(memoryFace(face), fontSize = 16.sp)
+                    }
+                }
+            }
         }
     }
 }
