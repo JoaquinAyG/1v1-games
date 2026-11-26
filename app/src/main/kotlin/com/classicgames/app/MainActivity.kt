@@ -78,6 +78,7 @@ private fun AppRoot(viewModel: AppViewModel, onRequestNotifications: () -> Unit)
             onMovePiece = viewModel::movePiece,
             onSetCode = viewModel::setSecretCode,
             onGuessCode = viewModel::guessCode,
+            onSwap = viewModel::swapHex,
             onLeave = viewModel::leaveRoom,
         )
     }

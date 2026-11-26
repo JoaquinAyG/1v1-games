@@ -6,6 +6,7 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -582,6 +583,76 @@ class GameOverWebSocketTest {
 
                 ann.say(guess(wrong))
                 assertEquals("The game is over", ann.next().text)
+            }
+        }
+    }
+
+    @Test
+    fun hexOverWebSocketSwapsAndPlaysToAWin() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+        val swap = ClientMessage(type = "swap")
+
+        client.webSocket("/ws?name=Ann&room=HEXES") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=HEXES") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                var version = 0L
+
+                /** Reads the update both players get for one change: the same board, with a newer version. */
+                suspend fun update(): HexState {
+                    val a = ann.next()
+                    val b = bob.next()
+                    assertEquals(a.hex, b.hex)
+                    assertEquals(a.version, b.version)
+                    assertTrue(a.version > version)
+                    version = a.version
+                    return a.hex!!
+                }
+
+                ann.say(ClientMessage(type = "startGame", game = "hex"))
+                var state = update()
+                assertEquals("Ann", state.redPlayer)
+                assertEquals("Bob", state.bluePlayer)
+                assertEquals(Hex.SIZE, state.size)
+
+                // Bob can't open or swap yet, Ann can't swap at all. Only the sender hears about it.
+                bob.say(move(40))
+                assertEquals("Not your turn", bob.next().text)
+                bob.say(swap)
+                assertEquals("Not your turn", bob.next().text)
+
+                // Ann opens in the centre, which is on the long diagonal: Bob's swap keeps it there, in blue.
+                ann.say(move(40))
+                state = update()
+                assertTrue(state.canSwap)
+                ann.say(swap)
+                assertEquals("Not your turn", ann.next().text)
+                bob.say(swap)
+                state = update()
+                assertEquals('B', state.board[40])
+                assertTrue(state.swapped)
+                assertFalse(state.canSwap)
+                assertEquals("R", state.turn)
+
+                // Ann walks down column 0 while Bob plays down column 8, which never joins his sides.
+                for (row in 0 until 9) {
+                    ann.say(move(row * 9))
+                    state = update()
+                    if (row == 8) break
+                    bob.say(move(row * 9 + 8))
+                    state = update()
+                }
+                assertEquals("won", state.status)
+                assertEquals("Ann", state.winner)
+                assertEquals((0 until 9).map { it * 9 }, state.winningPath)
+
+                bob.say(move(1))
+                assertEquals("The game is over", bob.next().text)
             }
         }
     }

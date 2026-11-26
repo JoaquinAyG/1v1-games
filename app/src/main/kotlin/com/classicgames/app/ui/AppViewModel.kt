@@ -21,6 +21,7 @@ import com.classicgames.core.ClientMessage
 import com.classicgames.core.ConnectState
 import com.classicgames.core.DotsState
 import com.classicgames.core.GameState
+import com.classicgames.core.HexState
 import com.classicgames.core.MastermindState
 import com.classicgames.core.OthelloState
 import com.classicgames.core.OwareState
@@ -75,6 +76,8 @@ data class RoomUi(
     val oware: OwareState? = null,
     /** The Mastermind game running in this room, if any (as this player sees it). */
     val mastermind: MastermindState? = null,
+    /** The Hex game running in this room, if any. */
+    val hex: HexState? = null,
     /** The game whose tile was tapped in the lobby to host this room; the room offers it first. */
     val preferredGame: String? = null,
     /** The server's last rejection (e.g. "Not your turn"); cleared by the next game update. */
@@ -296,11 +299,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             dots = msg.dots,
             oware = msg.oware,
             mastermind = msg.mastermind,
+            hex = msg.hex,
             notice = null,
             // No game at all means it was cancelled (the other player left): say so in the chat.
             lines = if (msg.state == null && msg.battle == null && msg.connect == null &&
                 msg.othello == null && msg.checkers == null && msg.dots == null && msg.oware == null &&
-                msg.mastermind == null
+                msg.mastermind == null && msg.hex == null
             ) {
                 room.lines + ChatLine("server", msg.text, system = true)
             } else {
@@ -345,6 +349,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * Connect Four: the column (0..6) to drop a disc into. Othello: 0..63, row by row.
      * Dots and Boxes: the line to draw (numbered as described on [ClientMessage]).
      * Oware: the pit to sow from (0..11 counter-clockwise, as described on [ClientMessage]).
+     * Hex: the cell to put a stone on (row * size + column, as described on [ClientMessage]).
      * The server validates it and answers with the new state.
      */
     fun playCell(cell: Int) {
@@ -376,6 +381,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun guessCode(code: List<Int>) {
         if (_room.value?.state != ConnectionState.Connected) return
         active?.outgoing?.trySend(ClientMessage(type = "move", code = code))
+    }
+
+    /** Hex: instead of placing a stone on your first turn as the second player, take over the first stone. */
+    fun swapHex() {
+        if (_room.value?.state != ConnectionState.Connected) return
+        active?.outgoing?.trySend(ClientMessage(type = "swap"))
     }
 
     /** Leaves the room for good: the seat is freed on the server, and the saved seat is forgotten. */
