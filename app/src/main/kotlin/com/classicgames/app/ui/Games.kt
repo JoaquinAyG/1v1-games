@@ -67,6 +67,7 @@ val GAMES = listOf(
     GameEntry(id = "quarto", title = "Quarto", icon = { QuartoIcon() }),
     GameEntry(id = "brisca", title = "Brisca", icon = { BriscaIcon() }),
     GameEntry(id = "maze", title = "Maze Guide", icon = { MazeIcon() }),
+    GameEntry(id = "hanabi", title = "Hanabi", icon = { HanabiIcon() }),
 )
 
 /** Lays the games out in rows of [columns] tiles. Gaps in the last row stay empty so tiles keep their size. */
@@ -458,6 +459,12 @@ fun MazeIcon(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.fillMaxSize().padding(16.dp)) {
         drawMaze(cells = 4, walls = walls, exit = 15, walker = 5, trail = listOf(0, 1, 2, 6, 5))
     }
+}
+
+/** A firework burst in the five Hanabi colours. */
+@Composable
+fun HanabiIcon(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxSize().padding(14.dp)) { drawHanabiBurst() }
 }
 
 /** A little warship on the waves. */

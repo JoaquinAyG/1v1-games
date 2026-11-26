@@ -69,7 +69,7 @@ fun LobbyScreen(viewModel: AppViewModel, onRequestNotifications: () -> Unit) {
                 color = Color.White,
             )
             Text(
-                "1v1 games with your friends",
+                "Games for two: against each other or together",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.85f),
             )
