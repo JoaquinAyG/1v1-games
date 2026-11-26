@@ -14,18 +14,21 @@ data class ShipPlacement(val cells: List<Int>)
  *  - "leave":     goodbye for good: the seat is freed at once (without it, a dropped connection keeps the seat
  *                 for a while so the player can come back)
  *  - "startGame": [game] ("tictactoe", "battleship", "connectfour", "othello", "checkers", "dotsandboxes",
- *                 "oware", "mastermind", "hex", "memory" or "quarto")
+ *                 "oware", "mastermind", "hex", "memory", "quarto" or "brisca")
  *  - "move":      [cell] (tic-tac-toe: 0..8 row by row; battleship: 0..99 row by row, the cell to fire at;
  *                 connect four: the column 0..6 to drop a disc into; othello: 0..63 row by row;
  *                 dots and boxes: the line to draw, see below; oware: the pit to sow from, see below;
  *                 hex: the cell to put a stone on, see below; memory: the card to flip, 0 until columns * rows
  *                 row by row; quarto: the cell 0..15, row by row, to put the piece you were given on),
  *                 or [piece] (quarto: the piece 0..15 from the pool to give your opponent, see below),
+ *                 or [card] (brisca: the card 0..39 from your hand to play, numbered as on [BriscaState]),
  *                 or [from] and [to] (checkers: 0..63 row by row, one step or one jump),
  *                 or [code] (mastermind: your guess at the opponent's code)
  *  - "place":     [ships] (battleship: your whole fleet, once)
  *  - "secret":    [code] (mastermind: the code your opponent has to crack, once)
  *  - "swap":      nothing else (hex: the second player takes over the first stone instead of placing one, see below)
+ *  - "swap7":     nothing else (brisca: on your turn, before playing your card, swap the 7 of trumps in your hand for
+ *                 the face-up trump under the deck; only while that card has not been drawn yet)
  * A frame that is not JSON at all is treated as a chat message with that text.
  *
  * Dots and Boxes lines, on a board of n x n boxes ([DotsState.size], 5 by default) with dot rows and dot
@@ -83,6 +86,7 @@ data class ClientMessage(
     val to: Int? = null,
     val code: List<Int>? = null,
     val piece: Int? = null,
+    val card: Int? = null,
 )
 
 /**
@@ -364,6 +368,53 @@ data class QuartoState(
     val sharedTraits: List<String> = emptyList(),
 )
 
+/** One card played in a Brisca trick: [card] (numbered as on [BriscaState]), by [player]. */
+@Serializable
+data class BriscaPlay(val player: String, val card: Int)
+
+/**
+ * A Brisca game as ONE player sees it; each player gets their own version, with their own hand and only the size of
+ * the opponent's. The opponent's cards and the order of the deck are never sent.
+ *
+ * Cards are numbered 0..39: card = suit * 10 + rank, with the suits 0 Oros, 1 Copas, 2 Espadas, 3 Bastos and the
+ * ranks 0 As, 1..6 the 2 to the 7, 7 Sota, 8 Caballo, 9 Rey. So 0 is the As de Oros, 12 the 3 de Copas, 26 the 7 de
+ * Espadas and 39 the Rey de Bastos. Within a suit the order is As, 3, Rey, Caballo, Sota, 7, 6, 5, 4, 2, and the points
+ * are As 11, 3 10, Rey 4, Caballo 3, Sota 2, the others nothing.
+ *  - [firstPlayer] led the first trick.
+ *  - [hand]: your cards, in the order you got them. [opponentCards]: how many the opponent holds.
+ *  - [deckSize]: cards still to be drawn, counting the face-up trump while it lies under the deck.
+ *  - [trumpCard]: the card turned face up, whose suit (trumpCard / 10) is trumps; after a swap, the 7 of trumps. It is
+ *    still sent once it has been drawn (deckSize 0), since both players saw who took it.
+ *  - [trick]: the cards of the trick being played, in order: empty, or the leader's card while the other player has to
+ *    answer. A trick is settled as soon as its second card is played, and then shows as [lastTrick], won by
+ *    [lastTrickWinner].
+ *  - [yourPoints] / [opponentPoints]: the points in the tricks each player has taken so far.
+ *  - [yourTurn]: you must play a card now (and may swap first if [canSwap]).
+ *  - [status]: "playing", "won" (61 points or more) or "draw" (60 each).
+ *  - [event]: a short sentence about what just happened, written for this player.
+ */
+@Serializable
+data class BriscaState(
+    val game: String,
+    val you: String,
+    val opponent: String,
+    val firstPlayer: String,
+    val hand: List<Int>,
+    val opponentCards: Int,
+    val deckSize: Int,
+    val trumpCard: Int,
+    val trick: List<BriscaPlay> = emptyList(),
+    val lastTrick: List<BriscaPlay> = emptyList(),
+    val lastTrickWinner: String? = null,
+    val yourPoints: Int,
+    val opponentPoints: Int,
+    val yourTurn: Boolean,
+    val canSwap: Boolean = false,
+    val status: String,
+    val winner: String? = null,
+    val event: String = "",
+)
+
 /**
  * A Battleship game as ONE player sees it; each player gets their own version, so the opponent's
  * ships are never revealed until the game is over. Boards are 100 characters, row by row.
@@ -396,8 +447,8 @@ data class BattleState(
  *  - "system": a notice from the server (joins, leaves)
  *  - "game":   the current game: [state] for tic-tac-toe, [battle] for Battleship, [connect] for Connect Four,
  *              [othello] for Othello, [checkers] for Checkers, [dots] for Dots and Boxes, [oware] for Oware,
- *              [mastermind] for Mastermind, [hex] for Hex, [memory] for Memory or [quarto] for Quarto; all null
- *              means "no game any more".
+ *              [mastermind] for Mastermind, [hex] for Hex, [memory] for Memory, [quarto] for Quarto or [brisca]
+ *              for Brisca; all null means "no game any more".
  *              [version] grows with every change to the room's game. Two changes made at nearly the same time
  *              can arrive in the wrong order, so ignore a "game" message whose [version] is lower than the last
  *              one you applied (an equal one, as sent on reconnect, is the same state again).
@@ -429,6 +480,7 @@ data class ServerMessage(
     val hex: HexState? = null,
     val memory: MemoryState? = null,
     val quarto: QuartoState? = null,
+    val brisca: BriscaState? = null,
     val token: String? = null,
     val history: List<HistoryLine>? = null,
     val version: Long = 0,

@@ -824,6 +824,97 @@ class GameOverWebSocketTest {
     }
 
     @Test
+    fun briscaOverWebSocketPlaysAWholeGameWithoutShowingTheOtherHand() = testApplication {
+        application { module() }
+        val client = createClient { install(WebSockets) }
+        fun card(card: Int) = ClientMessage(type = "move", card = card)
+        val swap7 = ClientMessage(type = "swap7")
+
+        client.webSocket("/ws?name=Ann&room=BRISCA") {
+            val ann = this
+            ann.handshake()
+            client.webSocket("/ws?name=Bob&room=BRISCA") {
+                val bob = this
+                bob.handshake()
+                ann.next() // "Bob joined"
+
+                var version = 0L
+
+                /**
+                 * Reads the update both players get for one change: each their own view, with the same newer version.
+                 * Checks that the views agree on everything public and that neither shows a card of the other hand.
+                 */
+                suspend fun update(): Pair<BriscaState, BriscaState> {
+                    val a = ann.next()
+                    val b = bob.next()
+                    assertEquals(a.version, b.version)
+                    assertTrue(a.version > version)
+                    version = a.version
+                    val sa = a.brisca!!
+                    val sb = b.brisca!!
+                    assertEquals("Ann", sa.you)
+                    assertEquals("Bob", sb.you)
+                    assertEquals(sa.trick, sb.trick)
+                    assertEquals(sa.lastTrick, sb.lastTrick)
+                    assertEquals(sa.deckSize, sb.deckSize)
+                    assertEquals(sa.trumpCard, sb.trumpCard)
+                    assertEquals(sa.yourPoints, sb.opponentPoints)
+                    assertEquals(sa.hand.size, sb.opponentCards)
+                    assertEquals(sb.hand.size, sa.opponentCards)
+                    for ((mine, theirs) in listOf(sa to sb.hand, sb to sa.hand)) {
+                        val seen = mine.hand + mine.trick.map { it.card } + mine.lastTrick.map { it.card } + mine.trumpCard
+                        // The face-up trump is the one card of the other hand you may know: you saw it being drawn.
+                        assertTrue(seen.none { it in theirs && it != mine.trumpCard }, "${mine.you} sees $seen, other hand $theirs")
+                    }
+                    return sa to sb
+                }
+
+                ann.say(ClientMessage(type = "startGame", game = "brisca"))
+                var (a, b) = update()
+                assertEquals("Ann", a.firstPlayer)
+                assertTrue(a.yourTurn)
+                assertEquals(3, a.hand.size)
+                assertEquals(34, a.deckSize)
+
+                bob.say(card(b.hand.first()))
+                assertEquals("Not your turn", bob.next().text)
+                bob.say(swap7)
+                assertEquals("Not your turn", bob.next().text)
+                ann.say(card(b.hand.first()))
+                assertEquals("That card is not in your hand", ann.next().text)
+
+                // Both always play their first card, swapping the 7 of trumps first whenever they may.
+                var plays = 0
+                while (a.status == "playing") {
+                    var (me, state) = if (a.yourTurn) ann to a else bob to b
+                    if (state.canSwap) {
+                        val faceUp = state.trumpCard
+                        me.say(swap7)
+                        update().let { (x, y) -> a = x; b = y }
+                        state = if (me === ann) a else b
+                        assertEquals(Brisca.cardOf(Brisca.suitOf(faceUp), 6), state.trumpCard)
+                        assertTrue(faceUp in state.hand)
+                    }
+                    me.say(card(state.hand.first()))
+                    update().let { (x, y) -> a = x; b = y }
+                    assertTrue(++plays <= 40, "the game never ended")
+                }
+                assertEquals(40, plays)
+                assertEquals(120, a.yourPoints + a.opponentPoints)
+                when {
+                    a.yourPoints >= 61 -> assertEquals("Ann", a.winner)
+                    b.yourPoints >= 61 -> assertEquals("Bob", b.winner)
+                    else -> assertEquals("draw", a.status)
+                }
+                assertEquals(a.winner, b.winner)
+
+                ann.say(card(0))
+                assertEquals("The game is over", ann.next().text)
+            }
+        }
+    }
+
+    @Test
     fun longChatMessagesAreCut() = testApplication {
         application { module() }
         val client = createClient { install(WebSockets) }
